@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
-  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays
+  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail
 } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -42,6 +42,7 @@ function compressImage(file, maxWidth = 1000, quality = 0.6) {
   });
 }
 
+// Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
 // Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
 // (la llamada real a Anthropic pasa por /api/scan-invoice para no exponer la llave en el navegador)
 async function extraerFacturaConIA(dataUrl) {
@@ -86,6 +87,7 @@ const emptyData = () => ({
   empleados: [],
   materiales: [],
   bitacora: [],
+  clientes: [],
   nomina: [],
   ingresos: [],
   transferencias: [],
@@ -136,6 +138,7 @@ function useLedgerData() {
 const TABS = [
   { id: "dashboard", label: "Resumen", icon: LayoutDashboard },
   { id: "trabajos", label: "Trabajos", icon: Briefcase },
+  { id: "clientes", label: "Clientes", icon: Building2 },
   { id: "bitacora", label: "Actividad diaria", icon: CalendarDays },
   { id: "nomina", label: "Nómina", icon: Users },
   { id: "materiales", label: "Materiales", icon: Package },
@@ -225,6 +228,7 @@ export default function App() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-16">
         {tab === "dashboard" && <Dashboard data={data} />}
         {tab === "trabajos" && <Trabajos data={data} update={update} />}
+        {tab === "clientes" && <Clientes data={data} update={update} />}
         {tab === "bitacora" && <Bitacora data={data} update={update} />}
         {tab === "nomina" && <Nomina data={data} update={update} />}
         {tab === "materiales" && <Materiales data={data} update={update} onViewPhoto={setLightbox} />}
@@ -519,6 +523,7 @@ function Row({ label, value, bold, accent }) {
 function Trabajos({ data, update }) {
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [orden, setOrden] = useState("numero"); // "numero" = orden en que se agregaron, "abecedario" = A-Z
 
   const addTrabajo = () => {
     if (!form?.nombre) return;
@@ -554,8 +559,24 @@ function Trabajos({ data, update }) {
         </button>
       ) : (
         <div className="card p-4 mb-4 space-y-2">
-          <input className="ledger-input" placeholder="Nombre del trabajo" value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          <input className="ledger-input" placeholder="Apodo (la palabra que usan para nombrarlo)" value={form.apodo || ""} onChange={(e) => setForm({ ...form, apodo: e.target.value })} />
+          <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+            <Briefcase size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
+            <input
+              className="flex-1 py-2 pr-2 text-sm outline-none"
+              placeholder="Nombre del trabajo"
+              value={form.nombre || ""}
+              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+            />
+          </div>
+          <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+            <Tag size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
+            <input
+              className="flex-1 py-2 pr-2 text-sm outline-none"
+              placeholder='Apodo (ej. "Trabajo 1", "el del letrero roto")'
+              value={form.apodo || ""}
+              onChange={(e) => setForm({ ...form, apodo: e.target.value })}
+            />
+          </div>
           <input className="ledger-input" placeholder="Cliente / empresa" value={form.cliente || ""} onChange={(e) => setForm({ ...form, cliente: e.target.value })} />
           <input className="ledger-input" placeholder="Manager / contacto del cliente" value={form.managerCliente || ""} onChange={(e) => setForm({ ...form, managerCliente: e.target.value })} />
           <input className="ledger-input" placeholder="Dirección" value={form.direccion || ""} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
@@ -571,16 +592,52 @@ function Trabajos({ data, update }) {
         </div>
       )}
 
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[11px] text-[#7A7263] uppercase tracking-wide">Ordenar:</span>
+        <button
+          className="text-xs px-2.5 py-1 border"
+          style={{
+            borderColor: orden === "numero" ? AMBER : LINE,
+            background: orden === "numero" ? "#F3EEE4" : "#fff",
+            color: orden === "numero" ? "#1E2A38" : "#7A7263",
+          }}
+          onClick={() => setOrden("numero")}
+        >
+          Por número
+        </button>
+        <button
+          className="text-xs px-2.5 py-1 border"
+          style={{
+            borderColor: orden === "abecedario" ? AMBER : LINE,
+            background: orden === "abecedario" ? "#F3EEE4" : "#fff",
+            color: orden === "abecedario" ? "#1E2A38" : "#7A7263",
+          }}
+          onClick={() => setOrden("abecedario")}
+        >
+          A-Z
+        </button>
+      </div>
+
       <div className="space-y-2">
         {data.trabajos.length === 0 && <Empty text="Aún no hay trabajos registrados." />}
-        {data.trabajos.map((t) => {
+        {[...data.trabajos]
+          .sort((a, b) => {
+            if (orden === "abecedario") {
+              return (a.apodo || a.nombre || "").localeCompare(b.apodo || b.nombre || "", "es", { sensitivity: "base" });
+            }
+            return 0; // orden por número = mantiene el orden en que se agregaron
+          })
+          .map((t, idx) => {
           const c = calcTrabajo(t, data);
           const open = openId === t.id;
           return (
             <div key={t.id} className="card">
               <button className="w-full text-left p-4 flex justify-between items-center" onClick={() => setOpenId(open ? null : t.id)}>
                 <div>
-                  <div className="font-medium text-sm">{t.apodo || t.nombre}</div>
+                  <div className="font-medium text-sm">
+                    <span className="mono text-[#7A7263] mr-1.5">{idx + 1}.</span>
+                    {t.apodo || t.nombre}
+                  </div>
                   <div className="text-[12px] text-[#7A7263]">
                     {t.apodo ? `${t.nombre} · ` : ""}{t.cliente}{t.managerCliente ? ` (${t.managerCliente})` : ""}
                     {t.direccion ? ` · ${t.direccion}` : ""} · {fmtDate(t.fecha)}{t.diasEstimados ? ` · ${t.diasEstimados} días est.` : ""}
@@ -670,11 +727,14 @@ function Trabajos({ data, update }) {
                   </div>
 
                   <label className="text-[11px] text-[#7A7263] block mb-0.5">Apodo (la palabra que usan para nombrarlo)</label>
-                  <input
-                    className="ledger-input text-xs mb-3"
-                    value={t.apodo || ""}
-                    onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).apodo = e.target.value; })}
-                  />
+                  <div className="flex items-center gap-2 border mb-3" style={{ borderColor: LINE }}>
+                    <Tag size={14} className="text-[#7A7263] ml-2 shrink-0" />
+                    <input
+                      className="flex-1 py-1.5 pr-2 text-xs outline-none"
+                      value={t.apodo || ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).apodo = e.target.value; })}
+                    />
+                  </div>
 
                   <div className="stamp text-[12px] text-[#7A7263] mt-4 mb-2">CLIENTE</div>
                   <div className="grid grid-cols-2 gap-2 mb-2">
@@ -780,6 +840,127 @@ function Trabajos({ data, update }) {
 
 /* ---------------- Nomina ---------------- */
 /* ---------------- Bitácora de actividad diaria ---------------- */
+/* ---------------- Clientes ---------------- */
+function Clientes({ data, update }) {
+  const [form, setForm] = useState(null);
+  const [openId, setOpenId] = useState(null);
+
+  const addCliente = () => {
+    if (!form?.nombre) return;
+    update((d) =>
+      d.clientes.push({
+        id: uid(),
+        nombre: form.nombre,
+        contacto: form.contacto || "",
+        telefono: form.telefono || "",
+        correo: form.correo || "",
+        direccion: form.direccion || "",
+        notas: form.notas || "",
+      })
+    );
+    setForm(null);
+  };
+
+  const trabajosDeCliente = (nombreCliente) => data.trabajos.filter((t) => t.cliente === nombreCliente);
+
+  return (
+    <div>
+      <SectionTitle sub="Toda la información de cada cliente en un solo lugar">Clientes</SectionTitle>
+
+      {!form ? (
+        <button className="btn-primary mb-4" onClick={() => setForm({})}><Plus size={15} /> Nuevo cliente</button>
+      ) : (
+        <div className="card p-4 mb-4 space-y-2">
+          <input className="ledger-input" placeholder="Nombre del cliente / empresa" value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          <input className="ledger-input" placeholder="Contacto principal / manager" value={form.contacto || ""} onChange={(e) => setForm({ ...form, contacto: e.target.value })} />
+          <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+            <Phone size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
+            <input className="flex-1 py-2 pr-2 text-sm outline-none" placeholder="Teléfono" value={form.telefono || ""} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+          </div>
+          <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+            <Mail size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
+            <input className="flex-1 py-2 pr-2 text-sm outline-none" placeholder="Correo" value={form.correo || ""} onChange={(e) => setForm({ ...form, correo: e.target.value })} />
+          </div>
+          <input className="ledger-input" placeholder="Dirección" value={form.direccion || ""} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
+          <textarea className="ledger-input" rows={3} placeholder="Notas (preferencias, forma de pago, lo que sea útil recordar)" value={form.notas || ""} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+          <div className="flex gap-2 pt-1">
+            <button className="btn-primary" onClick={addCliente}><Check size={14} /> Guardar</button>
+            <button className="text-sm text-[#7A7263] px-3" onClick={() => setForm(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {data.clientes.length === 0 && <Empty text="Aún no hay clientes registrados." />}
+        {data.clientes.map((c) => {
+          const open = openId === c.id;
+          const trabajosRelacionados = trabajosDeCliente(c.nombre);
+          return (
+            <div key={c.id} className="card">
+              <button className="w-full text-left p-4 flex justify-between items-center" onClick={() => setOpenId(open ? null : c.id)}>
+                <div>
+                  <div className="font-medium text-sm">{c.nombre}</div>
+                  <div className="text-[12px] text-[#7A7263]">
+                    {c.contacto}{c.telefono ? ` · ${c.telefono}` : ""}
+                  </div>
+                </div>
+                {trabajosRelacionados.length > 0 && (
+                  <div className="text-[11px] text-[#7A7263]">{trabajosRelacionados.length} trabajo{trabajosRelacionados.length === 1 ? "" : "s"}</div>
+                )}
+              </button>
+
+              {open && (
+                <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3 space-y-2">
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Nombre</label>
+                    <input className="ledger-input text-xs" value={c.nombre} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).nombre = e.target.value; })} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Contacto / manager</label>
+                    <input className="ledger-input text-xs" value={c.contacto} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).contacto = e.target.value; })} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Teléfono</label>
+                    <input className="ledger-input text-xs" value={c.telefono} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).telefono = e.target.value; })} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Correo</label>
+                    <input className="ledger-input text-xs" value={c.correo} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).correo = e.target.value; })} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Dirección</label>
+                    <input className="ledger-input text-xs" value={c.direccion} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).direccion = e.target.value; })} />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Notas</label>
+                    <textarea className="ledger-input text-xs" rows={3} value={c.notas} onChange={(e) => update((d) => { d.clientes.find((x) => x.id === c.id).notas = e.target.value; })} />
+                  </div>
+
+                  {trabajosRelacionados.length > 0 && (
+                    <>
+                      <div className="stamp text-[12px] text-[#7A7263] mt-3 mb-1">TRABAJOS DE ESTE CLIENTE</div>
+                      {trabajosRelacionados.map((t) => (
+                        <div key={t.id} className="text-sm py-1 border-b last:border-0" style={{ borderColor: LINE }}>{t.apodo || t.nombre}</div>
+                      ))}
+                    </>
+                  )}
+
+                  <button
+                    className="text-[11px] text-[#A13D2E] mt-2"
+                    onClick={() => update((d) => { d.clientes = d.clientes.filter((x) => x.id !== c.id); })}
+                  >
+                    Eliminar cliente
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Bitacora({ data, update }) {
   const [form, setForm] = useState(null);
   const [filtroTrabajo, setFiltroTrabajo] = useState("");
@@ -1731,6 +1912,28 @@ function ReciboModal({ trabajo, data, onClose }) {
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
+  const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
+
+  // Reembolsos pendientes de ESTE trabajo únicamente (socios o trabajadores que pagaron de su bolsa)
+  const reembolsosTrabajo = {};
+  const acumular = (item, tipo) => {
+    const p = item.pagadoPor;
+    if (!p || p === "empresa" || p === "cliente" || item.reembolsado) return;
+    const nombre = pagadorNombre(data, p);
+    if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0 };
+    if (tipo === "Material") reembolsosTrabajo[p].materiales += Number(item.monto);
+    else reembolsosTrabajo[p].nomina += Number(item.monto);
+    reembolsosTrabajo[p].total += Number(item.monto);
+  };
+  materialesT.forEach((m) => acumular(m, "Material"));
+  nominaT.forEach((n) => acumular(n, "Nómina"));
+  const listaReembolsos = Object.values(reembolsosTrabajo);
+
+  // Primero se reembolsa a quien puso dinero de su bolsa, y lo que resta se divide 50/50 entre los socios
+  const totalReembolsosTrabajo = listaReembolsos.reduce((s, r) => s + r.total, 0);
+  const restoARepartir = c.ganancia - totalReembolsosTrabajo;
+  const mitadResto = restoARepartir / 2;
+  const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
@@ -1753,7 +1956,37 @@ function ReciboModal({ trabajo, data, onClose }) {
 
           <div className="text-center mb-2">
             <div className="text-xl font-bold uppercase">{trabajo.nombre}</div>
-            <div className="text-sm">{trabajo.cliente}</div>
+          </div>
+
+          <div className="recibo-linea" />
+
+          <div className="text-sm font-bold uppercase mb-2">Cliente</div>
+          <div className="text-lg font-bold mb-1.5">{trabajo.cliente || "—"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "3px", columnGap: "10px" }}>
+            {trabajo.managerCliente && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Contacto</span>
+                <span className="text-sm">{trabajo.managerCliente}</span>
+              </>
+            )}
+            {clienteInfo?.telefono && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Teléfono</span>
+                <span className="text-sm">{clienteInfo.telefono}</span>
+              </>
+            )}
+            {clienteInfo?.correo && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Correo</span>
+                <span className="text-sm">{clienteInfo.correo}</span>
+              </>
+            )}
+            {trabajo.direccion && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Dirección</span>
+                <span className="text-sm">{trabajo.direccion}</span>
+              </>
+            )}
           </div>
 
           <div className="recibo-linea" />
@@ -1800,12 +2033,67 @@ function ReciboModal({ trabajo, data, onClose }) {
           <div className="recibo-linea" />
 
           <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
-          {data.socios.map((s) => (
-            <div key={s.id} className="flex justify-between text-xl font-bold py-1">
-              <span>{s.nombre}</span>
-              <span>{money(c.porSocio)}</span>
+
+          {totalReembolsosTrabajo > 0 && (
+            <div className="bg-gray-50 px-3 py-2 mb-3" style={{ background: "#F5F3EE" }}>
+              <div className="flex justify-between text-xs py-0.5" style={{ color: "#555" }}>
+                <span>Ganancia del trabajo</span>
+                <span>{money(c.ganancia)}</span>
+              </div>
+              <div className="flex justify-between text-xs py-0.5" style={{ color: "#A13D2E" }}>
+                <span>Reembolsos pendientes</span>
+                <span>-{money(totalReembolsosTrabajo)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-bold py-1 mt-1" style={{ borderTop: "1px solid #999" }}>
+                <span>Resta a repartir</span>
+                <span>{money(restoARepartir)}</span>
+              </div>
             </div>
-          ))}
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            {data.socios.map((s) => {
+              const reembolsoPropio = reembolsoDeSocio(s.id);
+              return (
+                <div key={s.id} className="text-center py-2 px-1" style={{ background: "#F5F3EE" }}>
+                  <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
+                  <div className="text-xl font-bold mt-0.5">{money(mitadResto + reembolsoPropio)}</div>
+                  {reembolsoPropio > 0 && (
+                    <div className="text-[10px] mt-1 leading-tight" style={{ color: "#888" }}>
+                      {money(mitadResto)} + {money(reembolsoPropio)} reemb.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {listaReembolsos.length > 0 && (
+            <>
+              <div className="recibo-linea" />
+              <div className="text-sm font-bold uppercase mb-2">Reembolsos pendientes de este trabajo</div>
+              {listaReembolsos.map((r) => (
+                <div key={r.nombre} className="mb-2">
+                  <div className="flex justify-between text-base font-bold">
+                    <span>{r.nombre}</span>
+                    <span className="whitespace-nowrap" style={{ color: "#A13D2E" }}>{money(r.total)}</span>
+                  </div>
+                  {r.materiales > 0 && (
+                    <div className="flex justify-between text-sm pl-3" style={{ color: "#555" }}>
+                      <span>· Materiales</span>
+                      <span>{money(r.materiales)}</span>
+                    </div>
+                  )}
+                  {r.nomina > 0 && (
+                    <div className="flex justify-between text-sm pl-3" style={{ color: "#555" }}>
+                      <span>· Mano de obra</span>
+                      <span>{money(r.nomina)}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
 
           {reporte?.notas && (
             <>
