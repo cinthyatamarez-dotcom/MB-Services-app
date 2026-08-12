@@ -1488,9 +1488,18 @@ function Nomina({ data, update }) {
           <div className="space-y-1 mb-3">
             {data.empleados.length === 0 && <Empty text="Sin empleados registrados." />}
             {data.empleados.map((e) => (
-              <div key={e.id} className="flex justify-between text-sm py-1 border-b last:border-0" style={{ borderColor: LINE }}>
+              <div key={e.id} className="flex justify-between items-center text-sm py-1 border-b last:border-0" style={{ borderColor: LINE }}>
                 <span>{e.nombre} <span className="text-[11px] text-[#7A7263]">({e.tipo === "planta" ? "planta" : "por día"})</span></span>
-                <span className="mono">{money(e.tarifa)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="mono">{money(e.tarifa)}</span>
+                  <button
+                    onClick={() => update((d) => { d.empleados = d.empleados.filter((x) => x.id !== e.id); })}
+                    className="text-[#A13D2E]"
+                    title="Eliminar empleado"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
