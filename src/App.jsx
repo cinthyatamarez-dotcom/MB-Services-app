@@ -1437,6 +1437,8 @@ function Bitacora({ data, update }) {
 function Nomina({ data, update }) {
   const [empForm, setEmpForm] = useState(null);
   const [payForm, setPayForm] = useState(null);
+  const [editandoPagoId, setEditandoPagoId] = useState(null);
+  const [editForm, setEditForm] = useState({});
   const turnoHoy = socioEnTurno(data, todayISO());
 
   const addEmpleado = () => {
@@ -1577,13 +1579,78 @@ function Nomina({ data, update }) {
         {[...data.nomina].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((n) => {
           const emp = data.empleados.find((e) => e.id === n.empleadoId);
           const trab = data.trabajos.find((t) => t.id === n.trabajoId);
+          const editando = editandoPagoId === n.id;
           return (
-            <div key={n.id} className="flex justify-between items-center py-1.5 text-sm border-b last:border-0" style={{ borderColor: LINE }}>
-              <div>
-                <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
-                <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.reembolsado ? " · reembolsado" : ""}</div>
-              </div>
-              <span className="mono">{money(n.monto)}</span>
+            <div key={n.id} className="py-1.5 border-b last:border-0" style={{ borderColor: LINE }}>
+              {editando ? (
+                <div className="space-y-2 py-1">
+                  <select className="ledger-input text-xs" value={editForm.empleadoId || ""} onChange={(e) => setEditForm({ ...editForm, empleadoId: e.target.value })}>
+                    <option value="">Empleado…</option>
+                    {data.empleados.map((e) => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                  <select className="ledger-input text-xs" value={editForm.trabajoId || ""} onChange={(e) => setEditForm({ ...editForm, trabajoId: e.target.value })}>
+                    <option value="">Trabajo (opcional)…</option>
+                    {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                  </select>
+                  <input className="ledger-input text-xs" type="number" placeholder="Monto" value={editForm.monto || ""} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
+                  <input className="ledger-input text-xs" type="date" value={editForm.fecha || ""} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
+                  <select className="ledger-input text-xs" value={editForm.pagadoPor || "empresa"} onChange={(e) => setEditForm({ ...editForm, pagadoPor: e.target.value })}>
+                    <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                    {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                  </select>
+                  <select className="ledger-input text-xs" value={editForm.cuentaId || ""} onChange={(e) => setEditForm({ ...editForm, cuentaId: e.target.value })}>
+                    <option value="">Cuenta bancaria…</option>
+                    {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn-primary"
+                      onClick={() => {
+                        update((d) => {
+                          const pago = d.nomina.find((x) => x.id === n.id);
+                          pago.empleadoId = editForm.empleadoId;
+                          pago.trabajoId = editForm.trabajoId || "";
+                          pago.monto = Number(editForm.monto);
+                          pago.fecha = editForm.fecha;
+                          pago.pagadoPor = editForm.pagadoPor || "empresa";
+                          pago.cuentaId = editForm.cuentaId || "";
+                        });
+                        setEditandoPagoId(null);
+                      }}
+                    >
+                      <Check size={13} /> Guardar
+                    </button>
+                    <button className="text-xs text-[#7A7263] px-2" onClick={() => setEditandoPagoId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex justify-between items-center text-sm">
+                  <div>
+                    <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
+                    <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.reembolsado ? " · reembolsado" : ""}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="mono">{money(n.monto)}</span>
+                    <button
+                      className="text-[#7A7263]"
+                      title="Editar pago"
+                      onClick={() => {
+                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "" });
+                        setEditandoPagoId(n.id);
+                      }}
+                    >
+                      <PenLine size={13} />
+                    </button>
+                    <button
+                      className="text-[#A13D2E]"
+                      title="Eliminar pago"
+                      onClick={() => update((d) => { d.nomina = d.nomina.filter((x) => x.id !== n.id); })}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
