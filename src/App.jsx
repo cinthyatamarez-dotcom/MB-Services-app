@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
-  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail
+  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash
 } from "lucide-react";
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -532,6 +532,7 @@ function Trabajos({ data, update }) {
         id: uid(),
         nombre: form.nombre,
         apodo: form.apodo || "",
+        numeroTrabajo: form.numeroTrabajo || "",
         cliente: form.cliente || "",
         managerCliente: form.managerCliente || "",
         direccion: form.direccion || "",
@@ -577,10 +578,23 @@ function Trabajos({ data, update }) {
               onChange={(e) => setForm({ ...form, apodo: e.target.value })}
             />
           </div>
+          <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+            <Hash size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
+            <input
+              className="flex-1 py-2 pr-2 text-sm outline-none"
+              placeholder="Número de trabajo (ej. 1, 2, 3...)"
+              value={form.numeroTrabajo || ""}
+              onChange={(e) => setForm({ ...form, numeroTrabajo: e.target.value })}
+            />
+          </div>
           <input className="ledger-input" placeholder="Cliente / empresa" value={form.cliente || ""} onChange={(e) => setForm({ ...form, cliente: e.target.value })} />
           <input className="ledger-input" placeholder="Manager / contacto del cliente" value={form.managerCliente || ""} onChange={(e) => setForm({ ...form, managerCliente: e.target.value })} />
           <input className="ledger-input" placeholder="Dirección" value={form.direccion || ""} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
-          <textarea className="ledger-input" rows={2} placeholder="Trabajo a realizar en ese lugar" value={form.descripcionTrabajo || ""} onChange={(e) => setForm({ ...form, descripcionTrabajo: e.target.value })} />
+          <label className="text-[11px] text-[#7A7263] block mb-0.5">Trabajo a realizar en ese lugar</label>
+          <NumberedListEditor
+            value={form.descripcionTrabajo || ""}
+            onChange={(val) => setForm({ ...form, descripcionTrabajo: val })}
+          />
           <input className="ledger-input" type="number" placeholder="Estimado ($)" value={form.estimado || ""} onChange={(e) => setForm({ ...form, estimado: e.target.value })} />
           <label className="text-[11px] text-[#7A7263] block">Fecha de inicio</label>
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
@@ -635,7 +649,7 @@ function Trabajos({ data, update }) {
               <button className="w-full text-left p-4 flex justify-between items-center" onClick={() => setOpenId(open ? null : t.id)}>
                 <div>
                   <div className="font-medium text-sm">
-                    <span className="mono text-[#7A7263] mr-1.5">{idx + 1}.</span>
+                    <span className="mono text-[#7A7263] mr-1.5">{t.numeroTrabajo ? `#${t.numeroTrabajo}` : `${idx + 1}.`}</span>
                     {t.apodo || t.nombre}
                   </div>
                   <div className="text-[12px] text-[#7A7263]">
@@ -689,12 +703,12 @@ function Trabajos({ data, update }) {
                   </div>
 
                   <label className="text-[11px] text-[#7A7263] block mb-0.5 mt-3">Trabajo a realizar en ese lugar</label>
-                  <textarea
-                    className="ledger-input text-xs mb-3"
-                    rows={2}
-                    value={t.descripcionTrabajo || ""}
-                    onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).descripcionTrabajo = e.target.value; })}
-                  />
+                  <div className="mb-3">
+                    <NumberedListEditor
+                      value={t.descripcionTrabajo || ""}
+                      onChange={(val) => update((d) => { d.trabajos.find((x) => x.id === t.id).descripcionTrabajo = val; })}
+                    />
+                  </div>
 
                   <label className="text-[11px] text-[#7A7263] block mb-1">¿Quién realizó este trabajo?</label>
                   {data.empleados.length === 0 && <p className="text-[13px] text-[#7A7263] mb-3">No hay empleados dados de alta todavía (pestaña Nómina).</p>}
@@ -733,6 +747,16 @@ function Trabajos({ data, update }) {
                       className="flex-1 py-1.5 pr-2 text-xs outline-none"
                       value={t.apodo || ""}
                       onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).apodo = e.target.value; })}
+                    />
+                  </div>
+
+                  <label className="text-[11px] text-[#7A7263] block mb-0.5">Número de trabajo</label>
+                  <div className="flex items-center gap-2 border mb-3" style={{ borderColor: LINE }}>
+                    <Hash size={14} className="text-[#7A7263] ml-2 shrink-0" />
+                    <input
+                      className="flex-1 py-1.5 pr-2 text-xs outline-none"
+                      value={t.numeroTrabajo || ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).numeroTrabajo = e.target.value; })}
                     />
                   </div>
 
@@ -2107,6 +2131,45 @@ function ReciboModal({ trabajo, data, onClose }) {
           <div className="text-center text-[11px] tracking-widest uppercase mt-3">*** Fin del reporte ***</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- Lista numerada (para "trabajo a realizar") ---------------- */
+function NumberedListEditor({ value, onChange }) {
+  const items = (value || "").split("\n");
+  const displayItems = items.length ? items : [""];
+
+  const updateItem = (idx, text) => {
+    const next = [...displayItems];
+    next[idx] = text;
+    onChange(next.join("\n"));
+  };
+  const addItem = () => onChange([...displayItems, ""].join("\n"));
+  const removeItem = (idx) => onChange(displayItems.filter((_, i) => i !== idx).join("\n"));
+
+  return (
+    <div className="space-y-1.5">
+      {displayItems.map((item, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <span className="text-xs text-[#7A7263] w-4 text-right shrink-0">{idx + 1}.</span>
+          <input
+            className="flex-1 border text-sm py-1.5 px-2 outline-none"
+            style={{ borderColor: LINE }}
+            value={item}
+            onChange={(e) => updateItem(idx, e.target.value)}
+            placeholder={`Paso ${idx + 1}`}
+          />
+          {displayItems.length > 1 && (
+            <button type="button" onClick={() => removeItem(idx)} className="text-[#A13D2E] shrink-0">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      ))}
+      <button type="button" onClick={addItem} className="text-[11px] text-[#7A7263] underline">
+        + Agregar paso
+      </button>
     </div>
   );
 }
