@@ -6,7 +6,7 @@ import {
 import { db } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 
-const DOC_REF_PATH = ["app", "data"]; // colección "app", documento "data"
+const DOC_REF_PATH = ["app", "data"];
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -43,20 +43,22 @@ function compressImage(file, maxWidth = 1000, quality = 0.6) {
 }
 
 // Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
-// Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
-// (la llamada real a Anthropic pasa por /api/scan-invoice para no exponer la llave en el navegador)
 async function extraerFacturaConIA(dataUrl) {
   const base64 = dataUrl.split(",")[1];
+  const prompt = `Eres un asistente que lee fotos de facturas o tickets de compra de materiales (ferretería, Home Depot, etc). Devuelve SOLO un objeto JSON, sin texto adicional, sin explicaciones, sin backticks de markdown, con esta forma exacta:
+{"tienda": string o null, "fecha": "YYYY-MM-DD" o null, "items": [{"descripcion": string, "numeroProducto": string o null, "cantidad": number, "precioUnitario": number o null, "importe": number}], "total": number o null}
+Reglas: usa el año actual si el ticket no trae año completo. Si no puedes leer un campo, usa null. No inventes renglones que no aparezcan en la imagen. "importe" es el precio total de esa línea (cantidad x precio unitario), no el subtotal del ticket.`;
+
   const response = await fetch("/api/scan-invoice", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: base64 }),
+    body: JSON.stringify({ base64, prompt }),
   });
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    throw new Error(errText || "Error del servidor al leer la factura");
-  }
-  const parsed = await response.json();
+  const data = await response.json();
+  const textBlock = (data.content || []).find((b) => b.type === "text");
+  if (!textBlock) throw new Error("Sin respuesta de la IA");
+  const clean = textBlock.text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(clean);
   if (!Array.isArray(parsed.items)) throw new Error("Formato inesperado");
   return parsed;
 }
@@ -111,9 +113,9 @@ function useLedgerData() {
         }
         setStatus("ready");
       },
-      (err) => {
-        console.error(err);
-        setStatus("error");
+      (e) => {
+        setData(emptyData());
+        setStatus("ready");
       }
     );
     return () => unsub();
@@ -127,7 +129,6 @@ function useLedgerData() {
       await setDoc(ref, next);
       setStatus("ready");
     } catch (e) {
-      console.error(e);
       setStatus("error");
     }
   }, []);
@@ -985,98 +986,65 @@ function Clientes({ data, update }) {
   );
 }
 
+// Nombre legible de un participante según su tipo (socio, empleado, o persona libre)
+function nombreParticipante(data, p) {
+  if (p.tipo === "socio") return data.socios.find((s) => s.id === p.ref)?.nombre || "—";
+  if (p.tipo === "empleado") return data.empleados.find((e) => e.id === p.ref)?.nombre || "—";
+  return p.ref;
+}
+
 function Bitacora({ data, update }) {
   const [form, setForm] = useState(null);
   const [nuevoParticipante, setNuevoParticipante] = useState("");
   const [filtroTrabajo, setFiltroTrabajo] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [extraTemp, setExtraTemp] = useState("");
+  const [pagoAbiertoId, setPagoAbiertoId] = useState(null);
+  const [pagoForm, setPagoForm] = useState({});
 
   const addEntrada = () => {
     if (!form?.trabajoId || !form?.descripcion) return;
-
-    const nominaId = uid();
-    const hayPago = form.empleadoPagoId && form.montoNota;
-
     update((d) => {
       d.bitacora.push({
         id: uid(),
         trabajoId: form.trabajoId,
         fecha: form.fecha || todayISO(),
         descripcion: form.descripcion,
-        empleadoIds: form.empleadoIds || [],
-        socioIds: form.socioIds || [],
-        extras: form.extras || [],
-        estado: form.estado || "pendiente",
-        nominaId: hayPago ? nominaId : "",
+        participantes: form.participantes || [],
+        nominaIds: [],
       });
-
-      if (hayPago) {
-        d.nomina.push({
-          id: nominaId,
-          empleadoId: form.empleadoPagoId,
-          trabajoId: form.trabajoId,
-          fecha: form.fecha || todayISO(),
-          monto: Number(form.montoNota),
-          pagadoPor: form.pagadoPorNota || "empresa",
-          cuentaId: form.cuentaIdNota || "",
-          reembolsado: false,
-        });
-      }
     });
     setForm(null);
     setNuevoParticipante("");
   };
 
-  const toggleEmpleado = (empId) => {
+  const toggleParticipanteForm = (tipo, ref) => {
     setForm((f) => {
-      const set = new Set(f.empleadoIds || []);
-      set.has(empId) ? set.delete(empId) : set.add(empId);
-      return { ...f, empleadoIds: Array.from(set) };
+      const lista = f.participantes || [];
+      const existe = lista.some((p) => p.tipo === tipo && p.ref === ref);
+      const nueva = existe
+        ? lista.filter((p) => !(p.tipo === tipo && p.ref === ref))
+        : [...lista, { tipo, ref, estado: "pendiente" }];
+      return { ...f, participantes: nueva };
     });
   };
 
-  const toggleSocio = (socioId) => {
-    setForm((f) => {
-      const set = new Set(f.socioIds || []);
-      set.has(socioId) ? set.delete(socioId) : set.add(socioId);
-      return { ...f, socioIds: Array.from(set) };
-    });
-  };
-
-  const addExtra = () => {
+  const addExtraForm = () => {
     const nombre = nuevoParticipante.trim();
     if (!nombre) return;
-    setForm((f) => ({ ...f, extras: [...(f.extras || []), nombre] }));
+    setForm((f) => ({ ...f, participantes: [...(f.participantes || []), { tipo: "extra", ref: nombre, estado: "pendiente" }] }));
     setNuevoParticipante("");
   };
 
-  const removeExtra = (nombre) => {
-    setForm((f) => ({ ...f, extras: (f.extras || []).filter((n) => n !== nombre) }));
-  };
-
-  const toggleEstado = (id) => {
-    update((d) => {
-      const entrada = d.bitacora.find((x) => x.id === id);
-      entrada.estado = entrada.estado === "completado" ? "pendiente" : "completado";
-    });
-  };
-
-  const toggleEmpleadoGuardado = (bitId, empId) => {
+  // --- Edición de una actividad ya guardada ---
+  const toggleParticipanteGuardado = (bitId, tipo, ref) => {
     update((d) => {
       const entrada = d.bitacora.find((x) => x.id === bitId);
-      const set = new Set(entrada.empleadoIds || []);
-      set.has(empId) ? set.delete(empId) : set.add(empId);
-      entrada.empleadoIds = Array.from(set);
-    });
-  };
-
-  const toggleSocioGuardado = (bitId, socioId) => {
-    update((d) => {
-      const entrada = d.bitacora.find((x) => x.id === bitId);
-      const set = new Set(entrada.socioIds || []);
-      set.has(socioId) ? set.delete(socioId) : set.add(socioId);
-      entrada.socioIds = Array.from(set);
+      const lista = entrada.participantes || [];
+      const existe = lista.some((p) => p.tipo === tipo && p.ref === ref);
+      entrada.participantes = existe
+        ? lista.filter((p) => !(p.tipo === tipo && p.ref === ref))
+        : [...lista, { tipo, ref, estado: "pendiente" }];
     });
   };
 
@@ -1084,15 +1052,40 @@ function Bitacora({ data, update }) {
     if (!nombre.trim()) return;
     update((d) => {
       const entrada = d.bitacora.find((x) => x.id === bitId);
-      entrada.extras = [...(entrada.extras || []), nombre.trim()];
+      entrada.participantes = [...(entrada.participantes || []), { tipo: "extra", ref: nombre.trim(), estado: "pendiente" }];
     });
   };
 
-  const removeExtraGuardado = (bitId, nombre) => {
+  const toggleEstadoParticipante = (bitId, tipo, ref) => {
     update((d) => {
       const entrada = d.bitacora.find((x) => x.id === bitId);
-      entrada.extras = (entrada.extras || []).filter((n) => n !== nombre);
+      const p = (entrada.participantes || []).find((x) => x.tipo === tipo && x.ref === ref);
+      if (p) p.estado = p.estado === "completado" ? "pendiente" : "completado";
     });
+  };
+
+  const guardarPago = (bitId) => {
+    if (!pagoForm.empleadoId || !pagoForm.monto) return;
+    const nominaId = uid();
+    update((d) => {
+      d.nomina.push({
+        id: nominaId,
+        empleadoId: pagoForm.empleadoId,
+        trabajoId: d.bitacora.find((x) => x.id === bitId).trabajoId,
+        fecha: d.bitacora.find((x) => x.id === bitId).fecha,
+        monto: Number(pagoForm.monto),
+        pagadoPor: pagoForm.pagadoPor || "empresa",
+        cuentaId: pagoForm.cuentaId || "",
+        reembolsado: false,
+      });
+      const entrada = d.bitacora.find((x) => x.id === bitId);
+      entrada.nominaIds = [...(entrada.nominaIds || []), nominaId];
+      // marca a ese empleado como completado automáticamente, si estaba entre los participantes
+      const p = (entrada.participantes || []).find((x) => x.tipo === "empleado" && x.ref === pagoForm.empleadoId);
+      if (p) p.estado = "completado";
+    });
+    setPagoAbiertoId(null);
+    setPagoForm({});
   };
 
   const entradas = [...data.bitacora]
@@ -1101,7 +1094,7 @@ function Bitacora({ data, update }) {
 
   return (
     <div>
-      <SectionTitle sub="Qué se hizo cada día en cada trabajo, quién participó, y si ya se le pagó">Actividad diaria</SectionTitle>
+      <SectionTitle sub="Qué se hizo cada día, quién participó, y el estado de cada quien por separado">Actividad diaria</SectionTitle>
 
       {data.trabajos.length === 0 ? (
         <div className="card p-4 mb-4">
@@ -1110,7 +1103,7 @@ function Bitacora({ data, update }) {
           </p>
         </div>
       ) : !form ? (
-        <button className="btn-primary mb-4" onClick={() => setForm({ fecha: todayISO(), empleadoIds: [], socioIds: [], extras: [], estado: "pendiente" })}>
+        <button className="btn-primary mb-4" onClick={() => setForm({ fecha: todayISO(), participantes: [] })}>
           <Plus size={14} /> Registrar actividad
         </button>
       ) : (
@@ -1129,16 +1122,17 @@ function Bitacora({ data, update }) {
           />
 
           <div className="stamp text-[12px] text-[#7A7263] mt-2 mb-1">¿QUIÉN PARTICIPÓ?</div>
+          <p className="text-[11px] text-[#7A7263] mb-1">Toca para agregar. Ya guardada la actividad, cada quien tiene su propio estado.</p>
 
           {data.socios.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-1">
               {data.socios.map((s) => {
-                const selected = (form.socioIds || []).includes(s.id);
+                const selected = (form.participantes || []).some((p) => p.tipo === "socio" && p.ref === s.id);
                 return (
                   <button
                     key={s.id}
                     type="button"
-                    onClick={() => toggleSocio(s.id)}
+                    onClick={() => toggleParticipanteForm("socio", s.id)}
                     className="text-xs px-2.5 py-1.5 border"
                     style={{
                       borderColor: selected ? AMBER : LINE,
@@ -1160,12 +1154,12 @@ function Bitacora({ data, update }) {
           ) : (
             <div className="flex flex-wrap gap-2 mb-1">
               {data.empleados.map((emp) => {
-                const selected = (form.empleadoIds || []).includes(emp.id);
+                const selected = (form.participantes || []).some((p) => p.tipo === "empleado" && p.ref === emp.id);
                 return (
                   <button
                     key={emp.id}
                     type="button"
-                    onClick={() => toggleEmpleado(emp.id)}
+                    onClick={() => toggleParticipanteForm("empleado", emp.id)}
                     className="text-xs px-2.5 py-1.5 border"
                     style={{
                       borderColor: selected ? AMBER : LINE,
@@ -1180,12 +1174,12 @@ function Bitacora({ data, update }) {
             </div>
           )}
 
-          {(form.extras || []).length > 0 && (
+          {(form.participantes || []).filter((p) => p.tipo === "extra").length > 0 && (
             <div className="flex flex-wrap gap-2 mb-1">
-              {form.extras.map((nombre) => (
-                <span key={nombre} className="text-xs px-2.5 py-1.5 border flex items-center gap-1" style={{ borderColor: AMBER, background: "#F3EEE4", color: "#1E2A38" }}>
-                  {nombre}
-                  <button type="button" onClick={() => removeExtra(nombre)}><X size={12} /></button>
+              {form.participantes.filter((p) => p.tipo === "extra").map((p) => (
+                <span key={p.ref} className="text-xs px-2.5 py-1.5 border flex items-center gap-1" style={{ borderColor: AMBER, background: "#F3EEE4", color: "#1E2A38" }}>
+                  {p.ref}
+                  <button type="button" onClick={() => toggleParticipanteForm("extra", p.ref)}><X size={12} /></button>
                 </span>
               ))}
             </div>
@@ -1197,77 +1191,16 @@ function Bitacora({ data, update }) {
               placeholder="Otra persona (ej. tu nombre, alguien no registrado)"
               value={nuevoParticipante}
               onChange={(e) => setNuevoParticipante(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraForm(); } }}
             />
-            <button type="button" className="text-sm px-3 border" style={{ borderColor: LINE }} onClick={addExtra}>
+            <button type="button" className="text-sm px-3 border" style={{ borderColor: LINE }} onClick={addExtraForm}>
               + Agregar
             </button>
           </div>
 
-          <div className="stamp text-[12px] text-[#7A7263] mt-2 mb-1">ESTADO DEL PAGO</div>
-          <div className="flex gap-2 mb-2">
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, estado: "pendiente" })}
-              className="text-xs px-3 py-1.5 border font-medium"
-              style={{
-                borderColor: form.estado === "pendiente" ? "#A13D2E" : LINE,
-                background: form.estado === "pendiente" ? "#F7DEDA" : "#fff",
-                color: form.estado === "pendiente" ? "#A13D2E" : "#7A7263",
-              }}
-            >
-              Pendiente
-            </button>
-            <button
-              type="button"
-              onClick={() => setForm({ ...form, estado: "completado" })}
-              className="text-xs px-3 py-1.5 border font-medium"
-              style={{
-                borderColor: form.estado === "completado" ? GREEN : LINE,
-                background: form.estado === "completado" ? "#DDEEDF" : "#fff",
-                color: form.estado === "completado" ? GREEN : "#7A7263",
-              }}
-            >
-              Completado
-            </button>
-          </div>
-
-          <div className="stamp text-[12px] text-[#7A7263] mt-2 mb-1">REGISTRAR PAGO DE NÓMINA (esto sí cuenta en Reembolsos y Cuentas)</div>
-          <select
-            className="ledger-input mb-2"
-            value={form.empleadoPagoId || ""}
-            onChange={(e) => setForm({ ...form, empleadoPagoId: e.target.value })}
-          >
-            <option value="">¿A quién se le pagó? (opcional)</option>
-            {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
-          </select>
-          {form.empleadoPagoId && (
-            <div className="space-y-2 mb-2">
-              <input
-                className="ledger-input"
-                type="number"
-                placeholder="Monto"
-                value={form.montoNota || ""}
-                onChange={(e) => setForm({ ...form, montoNota: e.target.value })}
-              />
-              <select
-                className="ledger-input"
-                value={form.pagadoPorNota || "empresa"}
-                onChange={(e) => setForm({ ...form, pagadoPorNota: e.target.value })}
-              >
-                <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-                {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
-              </select>
-              <select
-                className="ledger-input"
-                value={form.cuentaIdNota || ""}
-                onChange={(e) => setForm({ ...form, cuentaIdNota: e.target.value })}
-              >
-                <option value="">Cuenta bancaria…</option>
-                {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </div>
-          )}
+          <p className="text-[11px] text-[#7A7263]">
+            Después de guardar, marcas a cada quien como Pendiente o Completado, y puedes registrar el pago de nómina de cada uno por separado.
+          </p>
 
           <div className="flex gap-2">
             <button className="btn-primary" onClick={addEntrada}><Check size={14} /> Guardar</button>
@@ -1287,10 +1220,9 @@ function Bitacora({ data, update }) {
         {entradas.length === 0 && <Empty text="Sin actividad registrada todavía." />}
         {entradas.map((b) => {
           const trab = data.trabajos.find((t) => t.id === b.trabajoId);
-          const empleadosDelDia = (b.empleadoIds || []).map((id) => data.empleados.find((e) => e.id === id)?.nombre).filter(Boolean);
-          const sociosDelDia = (b.socioIds || []).map((id) => data.socios.find((s) => s.id === id)?.nombre).filter(Boolean);
-          const todosParticipantes = [...sociosDelDia, ...empleadosDelDia, ...(b.extras || [])];
-          const completado = b.estado === "completado";
+          const participantes = b.participantes || [];
+          const pagosDeEstaActividad = (b.nominaIds || []).map((id) => data.nomina.find((n) => n.id === id)).filter(Boolean);
+
           return (
             <div key={b.id} className="card p-4">
               <div className="flex justify-between items-start mb-1">
@@ -1299,24 +1231,48 @@ function Bitacora({ data, update }) {
               </div>
               <p className="text-sm text-[#4A4238] mb-2">{b.descripcion}</p>
 
-              {editandoId === b.id ? (
+              {/* Participantes con su propio estado — clic para Pendiente/Completado */}
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {participantes.map((p) => {
+                  const completado = p.estado === "completado";
+                  return (
+                    <button
+                      key={p.tipo + p.ref}
+                      onClick={() => toggleEstadoParticipante(b.id, p.tipo, p.ref)}
+                      className="text-[11px] font-medium px-2 py-1 border"
+                      style={{
+                        borderColor: completado ? GREEN : "#A13D2E",
+                        background: completado ? "#DDEEDF" : "#F7DEDA",
+                        color: completado ? GREEN : "#A13D2E",
+                      }}
+                    >
+                      {nombreParticipante(data, p)} · {completado ? "Completado" : "Pendiente"}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setEditandoId(editandoId === b.id ? null : b.id)}
+                  className="text-[11px] text-[#7A7263] underline"
+                >
+                  {editandoId === b.id ? "listo" : "+ / - personas"}
+                </button>
+              </div>
+
+              {editandoId === b.id && (
                 <div className="border p-2 mb-2" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
-                  <div className="text-[10px] text-[#7A7263] uppercase mb-1">Editar participantes</div>
+                  <div className="text-[10px] text-[#7A7263] uppercase mb-1">Agregar o quitar participantes</div>
                   {data.socios.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-1.5">
                       {data.socios.map((s) => {
-                        const selected = (b.socioIds || []).includes(s.id);
+                        const selected = participantes.some((p) => p.tipo === "socio" && p.ref === s.id);
                         return (
                           <button
                             key={s.id}
                             type="button"
-                            onClick={() => toggleSocioGuardado(b.id, s.id)}
+                            onClick={() => toggleParticipanteGuardado(b.id, "socio", s.id)}
                             className="text-[11px] px-2 py-1 border"
-                            style={{
-                              borderColor: selected ? AMBER : LINE,
-                              background: selected ? "#F3EEE4" : "#fff",
-                              color: selected ? "#1E2A38" : "#7A7263",
-                            }}
+                            style={{ borderColor: selected ? AMBER : LINE, background: selected ? "#F3EEE4" : "#fff", color: selected ? "#1E2A38" : "#7A7263" }}
                           >
                             {selected ? "✓ " : ""}{s.nombre}
                           </button>
@@ -1327,18 +1283,14 @@ function Bitacora({ data, update }) {
                   {data.empleados.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-1.5">
                       {data.empleados.map((emp) => {
-                        const selected = (b.empleadoIds || []).includes(emp.id);
+                        const selected = participantes.some((p) => p.tipo === "empleado" && p.ref === emp.id);
                         return (
                           <button
                             key={emp.id}
                             type="button"
-                            onClick={() => toggleEmpleadoGuardado(b.id, emp.id)}
+                            onClick={() => toggleParticipanteGuardado(b.id, "empleado", emp.id)}
                             className="text-[11px] px-2 py-1 border"
-                            style={{
-                              borderColor: selected ? AMBER : LINE,
-                              background: selected ? "#F3EEE4" : "#fff",
-                              color: selected ? "#1E2A38" : "#7A7263",
-                            }}
+                            style={{ borderColor: selected ? AMBER : LINE, background: selected ? "#F3EEE4" : "#fff", color: selected ? "#1E2A38" : "#7A7263" }}
                           >
                             {selected ? "✓ " : ""}{emp.nombre}
                           </button>
@@ -1346,17 +1298,7 @@ function Bitacora({ data, update }) {
                       })}
                     </div>
                   )}
-                  {(b.extras || []).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-1.5">
-                      {b.extras.map((nombre) => (
-                        <span key={nombre} className="text-[11px] px-2 py-1 border flex items-center gap-1" style={{ borderColor: AMBER, background: "#F3EEE4" }}>
-                          {nombre}
-                          <button type="button" onClick={() => removeExtraGuardado(b.id, nombre)}><X size={11} /></button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="flex gap-1.5 mb-2">
+                  <div className="flex gap-1.5">
                     <input
                       className="ledger-input flex-1 text-xs"
                       placeholder="Agregar otra persona"
@@ -1364,64 +1306,62 @@ function Bitacora({ data, update }) {
                       onChange={(e) => setExtraTemp(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addExtraGuardado(b.id, extraTemp); setExtraTemp(""); } }}
                     />
-                    <button
-                      type="button"
-                      className="text-xs px-2 border"
-                      style={{ borderColor: LINE }}
-                      onClick={() => { addExtraGuardado(b.id, extraTemp); setExtraTemp(""); }}
-                    >
+                    <button type="button" className="text-xs px-2 border" style={{ borderColor: LINE }} onClick={() => { addExtraGuardado(b.id, extraTemp); setExtraTemp(""); }}>
                       + Agregar
                     </button>
                   </div>
-                  <button className="text-[11px] text-[#7A7263] underline" onClick={() => setEditandoId(null)}>Listo</button>
+                </div>
+              )}
+
+              {pagosDeEstaActividad.length > 0 && (
+                <div className="mb-2 space-y-0.5">
+                  {pagosDeEstaActividad.map((pago) => {
+                    const empleado = data.empleados.find((e) => e.id === pago.empleadoId);
+                    return (
+                      <div key={pago.id} className="text-[11px] text-[#7A7263]">
+                        Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
+                        {pago.reembolsado ? " · reembolsado" : ""}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {pagoAbiertoId === b.id ? (
+                <div className="border p-2 mb-2 space-y-2" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                  <select className="ledger-input text-xs" value={pagoForm.empleadoId || ""} onChange={(e) => setPagoForm({ ...pagoForm, empleadoId: e.target.value })}>
+                    <option value="">¿A quién se le pagó?</option>
+                    {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                  </select>
+                  <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoForm.monto || ""} onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })} />
+                  <select className="ledger-input text-xs" value={pagoForm.pagadoPor || "empresa"} onChange={(e) => setPagoForm({ ...pagoForm, pagadoPor: e.target.value })}>
+                    <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                    {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                  </select>
+                  <select className="ledger-input text-xs" value={pagoForm.cuentaId || ""} onChange={(e) => setPagoForm({ ...pagoForm, cuentaId: e.target.value })}>
+                    <option value="">Cuenta bancaria…</option>
+                    {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                  <div className="flex gap-2">
+                    <button className="btn-primary" onClick={() => guardarPago(b.id)}><Check size={13} /> Guardar pago</button>
+                    <button className="text-xs text-[#7A7263] px-2" onClick={() => { setPagoAbiertoId(null); setPagoForm({}); }}>Cancelar</button>
+                  </div>
                 </div>
               ) : (
-                todosParticipantes.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setEditandoId(b.id)}
-                    className="flex flex-wrap gap-1 mb-2 text-left"
-                  >
-                    {todosParticipantes.map((nombre, i) => (
-                      <span key={nombre + i} className="text-[11px] px-2 py-0.5 bg-[#F3EEE4] border" style={{ borderColor: LINE }}>{nombre}</span>
-                    ))}
-                    <span className="text-[11px] text-[#7A7263] underline self-center">editar</span>
-                  </button>
-                )
-              )}
-              {editandoId !== b.id && todosParticipantes.length === 0 && (
-                <button className="text-[11px] text-[#7A7263] underline mb-2" onClick={() => setEditandoId(b.id)}>
-                  + agregar participantes
-                </button>
-              )}
-              {b.nominaId && (() => {
-                const pago = data.nomina.find((n) => n.id === b.nominaId);
-                if (!pago) return null;
-                const empleado = data.empleados.find((e) => e.id === pago.empleadoId);
-                return (
-                  <div className="text-[11px] text-[#7A7263] mb-2">
-                    Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
-                    {pago.reembolsado ? " · reembolsado" : ""}
-                  </div>
-                );
-              })()}
-              <div className="flex justify-between items-center">
                 <button
-                  onClick={() => toggleEstado(b.id)}
-                  className="text-[11px] font-medium px-2.5 py-1 border"
-                  style={{
-                    borderColor: completado ? GREEN : "#A13D2E",
-                    background: completado ? "#DDEEDF" : "#F7DEDA",
-                    color: completado ? GREEN : "#A13D2E",
-                  }}
+                  className="text-[11px] text-[#7A7263] underline mb-2"
+                  onClick={() => { setPagoAbiertoId(b.id); setPagoForm({}); }}
                 >
-                  {completado ? "Completado" : "Pendiente"}
+                  + Registrar pago de nómina
                 </button>
+              )}
+
+              <div className="flex justify-end">
                 <button
                   className="text-[11px] text-[#A13D2E]"
                   onClick={() => update((d) => { d.bitacora = d.bitacora.filter((x) => x.id !== b.id); })}
                 >
-                  Eliminar
+                  Eliminar actividad
                 </button>
               </div>
             </div>
