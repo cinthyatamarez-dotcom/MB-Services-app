@@ -97,6 +97,26 @@ const emptyData = () => ({
   rotacionNomina: { activa: false, socioInicioId: "s1", mesInicio: todayISO().slice(0, 7) },
 });
 
+// Convierte actividades guardadas con el formato viejo (empleadoIds/socioIds/extras/estado/nominaId)
+// al nuevo formato (participantes con estado individual, nominaIds en plural). No toca las que ya migraron.
+function migrarBitacora(bitacora) {
+  if (!Array.isArray(bitacora)) return [];
+  return bitacora.map((b) => {
+    if (b.participantes) return b; // ya está en el formato nuevo
+    const estadoViejo = b.estado === "completado" ? "completado" : "pendiente";
+    const participantes = [
+      ...(b.socioIds || []).map((ref) => ({ tipo: "socio", ref, estado: estadoViejo })),
+      ...(b.empleadoIds || []).map((ref) => ({ tipo: "empleado", ref, estado: estadoViejo })),
+      ...(b.extras || []).map((ref) => ({ tipo: "extra", ref, estado: estadoViejo })),
+    ];
+    return {
+      ...b,
+      participantes,
+      nominaIds: b.nominaId ? [b.nominaId] : (b.nominaIds || []),
+    };
+  });
+}
+
 function useLedgerData() {
   const [data, setData] = useState(null);
   const [status, setStatus] = useState("loading");
@@ -107,7 +127,8 @@ function useLedgerData() {
       ref,
       (snap) => {
         if (snap.exists()) {
-          setData({ ...emptyData(), ...snap.data() });
+          const raw = { ...emptyData(), ...snap.data() };
+          setData({ ...raw, bitacora: migrarBitacora(raw.bitacora) });
         } else {
           setData(emptyData());
         }
