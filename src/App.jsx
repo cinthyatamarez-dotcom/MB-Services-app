@@ -330,7 +330,20 @@ function calcTrabajo(t, data) {
   const materialesCliente = data.materiales.filter((m) => m.trabajoId === t.id && m.pagadoPor === "cliente");
   const materiales = materialesPropios.reduce((s, m) => s + Number(m.monto), 0);
   const materialesAportadosPorCliente = materialesCliente.reduce((s, m) => s + Number(m.monto), 0);
-  const manoDeObra = data.nomina.filter((n) => n.trabajoId === t.id).reduce((s, n) => s + Number(n.monto), 0);
+  const nominaItems = data.nomina.filter((n) => n.trabajoId === t.id);
+  const manoDeObra = nominaItems.reduce((s, n) => s + Number(n.monto), 0);
+
+  // Desglose de gastos por quién pagó cada cosa (ej. "Boris · Materiales", "David · Materiales")
+  const desgloseMap = {};
+  const acumular = (item, tipoLabel) => {
+    const key = (item.pagadoPor || "empresa") + "|" + tipoLabel;
+    if (!desgloseMap[key]) desgloseMap[key] = { nombre: pagadorNombre(data, item.pagadoPor), tipoLabel, monto: 0 };
+    desgloseMap[key].monto += Number(item.monto);
+  };
+  materialesPropios.forEach((m) => acumular(m, "Materiales"));
+  nominaItems.forEach((n) => acumular(n, "Nómina"));
+  const desglose = Object.values(desgloseMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
+
   const ganancia = Number(t.estimado || 0) - materiales - manoDeObra;
   // Si ya se sabe cuánto pagó realmente el cliente (a veces es menos del estimado), la ganancia real usa ese monto
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
@@ -339,6 +352,7 @@ function calcTrabajo(t, data) {
     materiales,
     materialesAportadosPorCliente,
     manoDeObra,
+    desglose,
     ganancia,
     porSocio: ganancia / 2,
     tienePagoReal,
@@ -712,6 +726,16 @@ function Trabajos({ data, update }) {
                     />
                   </div>
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
+                  {c.desglose.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.desglose.map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
+                          <span>{d.nombre} · {d.tipoLabel}</span>
+                          <span className="mono">{money(d.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   {c.materialesAportadosPorCliente > 0 && (
                     <Row label="Materiales que puso el cliente (no afecta)" value={money(c.materialesAportadosPorCliente)} />
@@ -2116,6 +2140,16 @@ function Reportes({ data, update }) {
                 <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3">
                   <Row label="Estimado" value={money(Number(t.estimado))} />
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
+                  {c.desglose.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.desglose.map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
+                          <span>{d.nombre} · {d.tipoLabel}</span>
+                          <span className="mono">{money(d.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   <Row label="Ganancia total" value={money(c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
                   <div className="grid grid-cols-2 gap-2 my-2">
