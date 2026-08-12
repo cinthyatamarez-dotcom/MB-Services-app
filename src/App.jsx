@@ -1063,6 +1063,8 @@ function Bitacora({ data, update }) {
   const [extraTemp, setExtraTemp] = useState("");
   const [pagoAbiertoId, setPagoAbiertoId] = useState(null);
   const [pagoForm, setPagoForm] = useState({});
+  const [pagoEditandoId, setPagoEditandoId] = useState(null);
+  const [pagoEditForm, setPagoEditForm] = useState({});
 
   const addEntrada = () => {
     if (!form?.trabajoId || !form?.descripcion) return;
@@ -1376,13 +1378,77 @@ function Bitacora({ data, update }) {
               )}
 
               {pagosDeEstaActividad.length > 0 && (
-                <div className="mb-2 space-y-0.5">
+                <div className="mb-2 space-y-1">
                   {pagosDeEstaActividad.map((pago) => {
                     const empleado = data.empleados.find((e) => e.id === pago.empleadoId);
+                    if (pagoEditandoId === pago.id) {
+                      return (
+                        <div key={pago.id} className="border p-2 space-y-2" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                          <select className="ledger-input text-xs" value={pagoEditForm.empleadoId || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, empleadoId: e.target.value })}>
+                            <option value="">¿A quién se le pagó?</option>
+                            {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                          </select>
+                          <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoEditForm.monto || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, monto: e.target.value })} />
+                          <select className="ledger-input text-xs" value={pagoEditForm.pagadoPor || "empresa"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, pagadoPor: e.target.value })}>
+                            <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                            {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                          </select>
+                          <select className="ledger-input text-xs" value={pagoEditForm.cuentaId || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, cuentaId: e.target.value })}>
+                            <option value="">Cuenta bancaria…</option>
+                            {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                          </select>
+                          <div className="flex gap-2">
+                            <button
+                              className="btn-primary"
+                              onClick={() => {
+                                update((d) => {
+                                  const p = d.nomina.find((x) => x.id === pago.id);
+                                  p.empleadoId = pagoEditForm.empleadoId;
+                                  p.monto = Number(pagoEditForm.monto);
+                                  p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
+                                  p.cuentaId = pagoEditForm.cuentaId || "";
+                                });
+                                setPagoEditandoId(null);
+                              }}
+                            >
+                              <Check size={13} /> Guardar
+                            </button>
+                            <button className="text-xs text-[#7A7263] px-2" onClick={() => setPagoEditandoId(null)}>Cancelar</button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
-                      <div key={pago.id} className="text-[11px] text-[#7A7263]">
-                        Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
-                        {pago.reembolsado ? " · reembolsado" : ""}
+                      <div key={pago.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
+                        <span>
+                          Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
+                          {pago.reembolsado ? " · reembolsado" : ""}
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0 ml-2">
+                          <button
+                            className="text-[#7A7263]"
+                            title="Editar este pago"
+                            onClick={() => {
+                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "" });
+                              setPagoEditandoId(pago.id);
+                            }}
+                          >
+                            <PenLine size={12} />
+                          </button>
+                          <button
+                            className="text-[#A13D2E]"
+                            title="Eliminar este pago"
+                            onClick={() =>
+                              update((d) => {
+                                d.nomina = d.nomina.filter((n) => n.id !== pago.id);
+                                const entrada = d.bitacora.find((x) => x.id === b.id);
+                                entrada.nominaIds = (entrada.nominaIds || []).filter((id) => id !== pago.id);
+                              })
+                            }
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </span>
                       </div>
                     );
                   })}
