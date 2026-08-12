@@ -693,7 +693,24 @@ function Trabajos({ data, update }) {
               </button>
               {open && (
                 <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3 space-y-1">
-                  <Row label="Estimado" value={money(Number(t.estimado))} />
+                  <label className="text-[11px] text-[#7A7263] block mb-0.5">Nombre del trabajo</label>
+                  <div className="flex items-center gap-2 border mb-3" style={{ borderColor: LINE }}>
+                    <Briefcase size={14} className="text-[#7A7263] ml-2 shrink-0" />
+                    <input
+                      className="flex-1 py-1.5 pr-2 text-xs outline-none"
+                      value={t.nombre || ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).nombre = e.target.value; })}
+                    />
+                  </div>
+                  <div className="mb-1">
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Estimado ($)</label>
+                    <input
+                      className="ledger-input text-xs"
+                      type="number"
+                      value={t.estimado ?? ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimado = e.target.value; })}
+                    />
+                  </div>
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   {c.materialesAportadosPorCliente > 0 && (
