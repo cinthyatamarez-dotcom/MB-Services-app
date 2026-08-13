@@ -45,59 +45,15 @@ function compressImage(file, maxWidth = 1000, quality = 0.6) {
 // Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
 async function extraerFacturaConIA(dataUrl) {
   const base64 = dataUrl.split(",")[1];
-  const prompt = `Eres un asistente que lee fotos de facturas o tickets de compra de materiales (ferretería, Home Depot, etc). Devuelve SOLO un objeto JSON, sin texto adicional, sin explicaciones, sin backticks de markdown, con esta forma exacta:
-{"tienda": string o null, "fecha": "YYYY-MM-DD" o null, "items": [{"descripcion": string, "numeroProducto": string o null, "cantidad": number, "precioUnitario": number o null, "importe": number}], "total": number o null}
-Reglas: usa el año actual si el ticket no trae año completo. Si no puedes leer un campo, usa null. No inventes renglones que no aparezcan en la imagen. "importe" es el precio total de esa línea (cantidad x precio unitario), no el subtotal del ticket.`;
-
   const response = await fetch("/api/scan-invoice", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ base64, prompt }),
+    body: JSON.stringify({ image: base64 }),
   });
   const data = await response.json();
-  const textBlock = (data.content || []).find((b) => b.type === "text");
-  if (!textBlock) throw new Error("Sin respuesta de la IA");
-  const clean = textBlock.text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
-  if (!Array.isArray(parsed.items)) throw new Error("Formato inesperado");
-  return parsed;
-}
-
-// Carga Tesseract.js desde un CDN público la primera vez que se necesita (gratis, sin instalación)
-let tesseractCargando = null;
-function cargarTesseract() {
-  if (window.Tesseract) return Promise.resolve(window.Tesseract);
-  if (tesseractCargando) return tesseractCargando;
-  tesseractCargando = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-    script.onload = () => resolve(window.Tesseract);
-    script.onerror = () => reject(new Error("No se pudo cargar el lector de texto gratuito"));
-    document.head.appendChild(script);
-  });
-  return tesseractCargando;
-}
-
-// Lee el texto de la foto con OCR gratuito y trata de adivinar renglones con su precio.
-// No es tan preciso como la IA paga, pero no tiene costo — el usuario revisa y corrige antes de guardar.
-async function extraerFacturaConOCR(dataUrl) {
-  const Tesseract = await cargarTesseract();
-  const { data } = await Tesseract.recognize(dataUrl, "spa+eng");
-  const lineas = (data.text || "").split("\n").map((l) => l.trim()).filter(Boolean);
-
-  // Busca precios con forma $12.34 / 12.34 / 12,34 en cada línea
-  const precioRegex = /\$?\s?(\d{1,4}[.,]\d{2})\b/;
-  const items = [];
-  lineas.forEach((linea) => {
-    const match = linea.match(precioRegex);
-    if (!match) return;
-    const importe = Number(match[1].replace(",", "."));
-    if (!importe || importe <= 0) return;
-    const descripcion = linea.replace(match[0], "").replace(/[-–·|]+$/, "").trim() || "Artículo";
-    items.push({ descripcion, numeroProducto: "", cantidad: 1, importe });
-  });
-
-  return { tienda: "", fecha: null, items, total: null, textoCrudo: lineas.join("\n") };
+  if (!response.ok) throw new Error(data?.error || "Error de la IA");
+  if (!Array.isArray(data.items)) throw new Error("Formato inesperado");
+  return data;
 }
 
 // Descarga todos los datos como archivo JSON — tu copia de seguridad, independiente de Claude
@@ -1899,16 +1855,15 @@ function Materiales({ data, update, onViewPhoto }) {
     setForm((f) => ({ ...f, fotos: (f.fotos || []).filter((_, i) => i !== idx) }));
   };
 
-  const handleEscaneo = async (e, metodo) => {
+  const handleEscaneo = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setScan({ status: "loading", metodo });
+    setScan({ status: "loading" });
     try {
       const foto = await compressImage(file, 1400, 0.72);
-      const parsed = metodo === "ocr" ? await extraerFacturaConOCR(foto) : await extraerFacturaConIA(foto);
+      const parsed = await extraerFacturaConIA(foto);
       setScan({
         status: "review",
-        metodo,
         foto,
         tienda: parsed.tienda || "",
         fecha: parsed.fecha || todayISO(),
@@ -1925,12 +1880,7 @@ function Materiales({ data, update, onViewPhoto }) {
         cuentaId: "",
       });
     } catch (err) {
-      setScan({
-        status: "error",
-        errorMsg: metodo === "ocr"
-          ? "No pude leer bien el texto de la factura. Intenta con más luz, más de cerca, o registra manualmente."
-          : "No pude leer la factura bien. Intenta con más luz o registra manualmente.",
-      });
+      setScan({ status: "error", errorMsg: "No pude leer la factura bien. Intenta con más luz o registra manualmente." });
     }
   };
 
@@ -1972,11 +1922,7 @@ function Materiales({ data, update, onViewPhoto }) {
         <div className="flex flex-wrap gap-2 mb-4">
           <label className="btn-primary cursor-pointer">
             <Sparkles size={15} /> Escanear factura (IA)
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleEscaneo(e, "ia")} />
-          </label>
-          <label className="text-sm flex items-center gap-1 px-3 border cursor-pointer" style={{ borderColor: LINE }}>
-            <Camera size={14} /> Leer texto (gratis)
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleEscaneo(e, "ocr")} />
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleEscaneo} />
           </label>
           <button
             className="text-sm flex items-center gap-1 px-3 border"
@@ -1992,9 +1938,7 @@ function Materiales({ data, update, onViewPhoto }) {
       {scan?.status === "loading" && (
         <div className="card p-6 mb-4 flex flex-col items-center gap-2 text-center">
           <Loader2 className="animate-spin text-[#7A7263]" size={26} />
-          <div className="text-sm text-[#4A4238]">
-            {scan.metodo === "ocr" ? "Leyendo el texto de la factura… (la primera vez puede tardar un poco más)" : "Leyendo la factura…"}
-          </div>
+          <div className="text-sm text-[#4A4238]">Leyendo la factura…</div>
         </div>
       )}
 
@@ -2007,11 +1951,6 @@ function Materiales({ data, update, onViewPhoto }) {
 
       {scan?.status === "review" && (
         <div className="card p-4 mb-4">
-          {scan.metodo === "ocr" && (
-            <div className="text-[12px] p-2 mb-3" style={{ background: "#FBF3E3", color: "#8A6416" }}>
-              Esto se leyó con el lector gratuito, así que puede tener errores o renglones de más/de menos — revisa bien cada descripción y precio antes de guardar.
-            </div>
-          )}
           <div className="flex gap-3 mb-3">
             {scan.foto && <img src={scan.foto} alt="Factura escaneada" className="w-16 h-16 object-cover border shrink-0" style={{ borderColor: LINE }} />}
             <div className="flex-1 space-y-2">
