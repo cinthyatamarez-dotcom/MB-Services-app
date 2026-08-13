@@ -1112,6 +1112,14 @@ function Bitacora({ data, update }) {
     });
   };
 
+  // Quita un participante puntual (sirve también para los "huérfanos" sin nombre que quedaron de la migración vieja)
+  const quitarParticipante = (bitId, tipo, ref) => {
+    update((d) => {
+      const entrada = d.bitacora.find((x) => x.id === bitId);
+      entrada.participantes = (entrada.participantes || []).filter((p) => !(p.tipo === tipo && p.ref === ref));
+    });
+  };
+
   const addExtraGuardado = (bitId, nombre) => {
     if (!nombre.trim()) return;
     update((d) => {
@@ -1295,23 +1303,32 @@ function Bitacora({ data, update }) {
               </div>
               <p className="text-sm text-[#4A4238] mb-2">{b.descripcion}</p>
 
-              {/* Participantes con su propio estado — clic para Pendiente/Completado */}
+              {/* Participantes con su propio estado — clic para Pendiente/Completado, X para quitar */}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {participantes.map((p) => {
                   const completado = p.estado === "completado";
                   return (
-                    <button
+                    <span
                       key={p.tipo + p.ref}
-                      onClick={() => toggleEstadoParticipante(b.id, p.tipo, p.ref)}
-                      className="text-[11px] font-medium px-2 py-1 border"
+                      className="text-[11px] font-medium pl-2 pr-1 py-1 border flex items-center gap-1"
                       style={{
                         borderColor: completado ? GREEN : "#A13D2E",
                         background: completado ? "#DDEEDF" : "#F7DEDA",
                         color: completado ? GREEN : "#A13D2E",
                       }}
                     >
-                      {nombreParticipante(data, p)} · {completado ? "Completado" : "Pendiente"}
-                    </button>
+                      <button type="button" onClick={() => toggleEstadoParticipante(b.id, p.tipo, p.ref)}>
+                        {nombreParticipante(data, p)} · {completado ? "Completado" : "Pendiente"}
+                      </button>
+                      <button
+                        type="button"
+                        title="Quitar de esta actividad"
+                        onClick={() => quitarParticipante(b.id, p.tipo, p.ref)}
+                        style={{ color: completado ? GREEN : "#A13D2E" }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
                   );
                 })}
                 <button
