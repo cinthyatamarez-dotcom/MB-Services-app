@@ -63,6 +63,43 @@ Reglas: usa el año actual si el ticket no trae año completo. Si no puedes leer
   return parsed;
 }
 
+// Carga Tesseract.js desde un CDN público la primera vez que se necesita (gratis, sin instalación)
+let tesseractCargando = null;
+function cargarTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractCargando) return tesseractCargando;
+  tesseractCargando = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    script.onload = () => resolve(window.Tesseract);
+    script.onerror = () => reject(new Error("No se pudo cargar el lector de texto gratuito"));
+    document.head.appendChild(script);
+  });
+  return tesseractCargando;
+}
+
+// Lee el texto de la foto con OCR gratuito y trata de adivinar renglones con su precio.
+// No es tan preciso como la IA paga, pero no tiene costo — el usuario revisa y corrige antes de guardar.
+async function extraerFacturaConOCR(dataUrl) {
+  const Tesseract = await cargarTesseract();
+  const { data } = await Tesseract.recognize(dataUrl, "spa+eng");
+  const lineas = (data.text || "").split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // Busca precios con forma $12.34 / 12.34 / 12,34 en cada línea
+  const precioRegex = /\$?\s?(\d{1,4}[.,]\d{2})\b/;
+  const items = [];
+  lineas.forEach((linea) => {
+    const match = linea.match(precioRegex);
+    if (!match) return;
+    const importe = Number(match[1].replace(",", "."));
+    if (!importe || importe <= 0) return;
+    const descripcion = linea.replace(match[0], "").replace(/[-–·|]+$/, "").trim() || "Artículo";
+    items.push({ descripcion, numeroProducto: "", cantidad: 1, importe });
+  });
+
+  return { tienda: "", fecha: null, items, total: null, textoCrudo: lineas.join("\n") };
+}
+
 // Descarga todos los datos como archivo JSON — tu copia de seguridad, independiente de Claude
 function descargarRespaldo(data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -1834,34 +1871,44 @@ function Materiales({ data, update, onViewPhoto }) {
         pagadoPor: pagadoPorFinal,
         cuentaId: form.cuentaId || "",
         reembolsado: false,
-        foto: form.foto || null,
+        fotos: form.fotos || [],
       })
     );
     setForm(null);
   };
 
   const handleFoto = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setUploading(true);
     try {
-      const dataUrl = await compressImage(file);
-      setForm((f) => ({ ...f, foto: dataUrl }));
+      const nuevasFotos = [];
+      for (const file of files) {
+        const dataUrl = await compressImage(file);
+        nuevasFotos.push(dataUrl);
+      }
+      setForm((f) => ({ ...f, fotos: [...(f.fotos || []), ...nuevasFotos] }));
     } catch {
       // si falla la compresión simplemente no se adjunta
     }
     setUploading(false);
+    e.target.value = "";
   };
 
-  const handleEscaneo = async (e) => {
+  const quitarFotoForm = (idx) => {
+    setForm((f) => ({ ...f, fotos: (f.fotos || []).filter((_, i) => i !== idx) }));
+  };
+
+  const handleEscaneo = async (e, metodo) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setScan({ status: "loading" });
+    setScan({ status: "loading", metodo });
     try {
       const foto = await compressImage(file, 1400, 0.72);
-      const parsed = await extraerFacturaConIA(foto);
+      const parsed = metodo === "ocr" ? await extraerFacturaConOCR(foto) : await extraerFacturaConIA(foto);
       setScan({
         status: "review",
+        metodo,
         foto,
         tienda: parsed.tienda || "",
         fecha: parsed.fecha || todayISO(),
@@ -1878,7 +1925,12 @@ function Materiales({ data, update, onViewPhoto }) {
         cuentaId: "",
       });
     } catch (err) {
-      setScan({ status: "error", errorMsg: "No pude leer la factura bien. Intenta con más luz o registra manualmente." });
+      setScan({
+        status: "error",
+        errorMsg: metodo === "ocr"
+          ? "No pude leer bien el texto de la factura. Intenta con más luz, más de cerca, o registra manualmente."
+          : "No pude leer la factura bien. Intenta con más luz o registra manualmente.",
+      });
     }
   };
 
@@ -1920,7 +1972,11 @@ function Materiales({ data, update, onViewPhoto }) {
         <div className="flex flex-wrap gap-2 mb-4">
           <label className="btn-primary cursor-pointer">
             <Sparkles size={15} /> Escanear factura (IA)
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleEscaneo} />
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleEscaneo(e, "ia")} />
+          </label>
+          <label className="text-sm flex items-center gap-1 px-3 border cursor-pointer" style={{ borderColor: LINE }}>
+            <Camera size={14} /> Leer texto (gratis)
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleEscaneo(e, "ocr")} />
           </label>
           <button
             className="text-sm flex items-center gap-1 px-3 border"
@@ -1936,7 +1992,9 @@ function Materiales({ data, update, onViewPhoto }) {
       {scan?.status === "loading" && (
         <div className="card p-6 mb-4 flex flex-col items-center gap-2 text-center">
           <Loader2 className="animate-spin text-[#7A7263]" size={26} />
-          <div className="text-sm text-[#4A4238]">Leyendo la factura…</div>
+          <div className="text-sm text-[#4A4238]">
+            {scan.metodo === "ocr" ? "Leyendo el texto de la factura… (la primera vez puede tardar un poco más)" : "Leyendo la factura…"}
+          </div>
         </div>
       )}
 
@@ -1949,6 +2007,11 @@ function Materiales({ data, update, onViewPhoto }) {
 
       {scan?.status === "review" && (
         <div className="card p-4 mb-4">
+          {scan.metodo === "ocr" && (
+            <div className="text-[12px] p-2 mb-3" style={{ background: "#FBF3E3", color: "#8A6416" }}>
+              Esto se leyó con el lector gratuito, así que puede tener errores o renglones de más/de menos — revisa bien cada descripción y precio antes de guardar.
+            </div>
+          )}
           <div className="flex gap-3 mb-3">
             {scan.foto && <img src={scan.foto} alt="Factura escaneada" className="w-16 h-16 object-cover border shrink-0" style={{ borderColor: LINE }} />}
             <div className="flex-1 space-y-2">
@@ -2072,12 +2135,29 @@ function Materiales({ data, update, onViewPhoto }) {
 
           <label className="flex items-center gap-2 border border-dashed p-3 cursor-pointer text-sm" style={{ borderColor: LINE }}>
             <Camera size={16} className="text-[#7A7263]" />
-            <span className="text-[#4A4238]">{uploading ? "Procesando foto…" : form.foto ? "Foto adjuntada · cambiar" : "Adjuntar foto de la factura"}</span>
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFoto} />
+            <span className="text-[#4A4238]">
+              {uploading ? "Procesando foto…" : (form.fotos?.length ? `${form.fotos.length} foto(s) adjuntada(s) · agregar otra` : "Adjuntar foto(s) de la factura")}
+            </span>
+            <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleFoto} />
           </label>
-          {form.foto && (
-            <img src={form.foto} alt="Vista previa de la factura" className="h-24 w-auto border" style={{ borderColor: LINE }} />
+          {form.fotos?.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {form.fotos.map((f, idx) => (
+                <div key={idx} className="relative">
+                  <img src={f} alt={`Página ${idx + 1}`} className="h-20 w-auto border" style={{ borderColor: LINE }} />
+                  <button
+                    type="button"
+                    onClick={() => quitarFotoForm(idx)}
+                    className="absolute -top-1.5 -right-1.5 bg-white border rounded-full"
+                    style={{ borderColor: LINE }}
+                  >
+                    <X size={12} className="text-[#A13D2E]" />
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
+          <p className="text-[11px] text-[#7A7263]">Si la factura tiene varias hojas, puedes agregarlas todas — toca "agregar otra" las veces que necesites.</p>
 
           <div className="flex gap-2">
             <button className="btn-primary" onClick={addMaterial} disabled={uploading}><Check size={14} /> Guardar</button>
@@ -2090,17 +2170,28 @@ function Materiales({ data, update, onViewPhoto }) {
         {data.materiales.length === 0 && <Empty text="Sin materiales registrados." />}
         {[...data.materiales].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((m) => {
           const trab = data.trabajos.find((t) => t.id === m.trabajoId);
+          const fotosM = m.fotos?.length ? m.fotos : (m.foto ? [m.foto] : []);
           return (
             <div key={m.id} className="flex justify-between items-center py-1.5 text-sm border-b last:border-0" style={{ borderColor: LINE }}>
               <div className="flex items-center gap-2">
-                {m.foto ? (
-                  <img
-                    src={m.foto}
-                    alt="Factura"
-                    className="w-9 h-9 object-cover border cursor-pointer shrink-0"
-                    style={{ borderColor: LINE }}
-                    onClick={() => onViewPhoto?.(m.foto)}
-                  />
+                {fotosM.length > 0 ? (
+                  <div className="flex -space-x-2 shrink-0">
+                    {fotosM.slice(0, 3).map((f, idx) => (
+                      <img
+                        key={idx}
+                        src={f}
+                        alt={`Factura página ${idx + 1}`}
+                        className="w-9 h-9 object-cover border cursor-pointer"
+                        style={{ borderColor: LINE }}
+                        onClick={() => onViewPhoto?.(f)}
+                      />
+                    ))}
+                    {fotosM.length > 3 && (
+                      <div className="w-9 h-9 flex items-center justify-center border bg-[#F3EEE4] text-[10px] text-[#7A7263]" style={{ borderColor: LINE }}>
+                        +{fotosM.length - 3}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}>
                     <ImageOff size={14} />
