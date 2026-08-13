@@ -344,6 +344,20 @@ function calcTrabajo(t, data) {
   nominaItems.forEach((n) => acumular(n, "Nómina"));
   const desglose = Object.values(desgloseMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
+  // Cuánto reembolsarle a cada persona, separado por materiales y por nómina — no incluye lo que puso
+  // la empresa (a la empresa no hay que reembolsarle) ni lo que puso el cliente.
+  const reembolsoMap = {};
+  const acumularReembolso = (item, tipoLabel) => {
+    const pagador = item.pagadoPor || "empresa";
+    if (pagador === "empresa" || pagador === "cliente") return;
+    const key = pagador + "|" + tipoLabel;
+    if (!reembolsoMap[key]) reembolsoMap[key] = { nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
+    reembolsoMap[key].monto += Number(item.monto);
+  };
+  materialesPropios.forEach((m) => acumularReembolso(m, "materiales"));
+  nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
+  const reembolsoPorPersona = Object.values(reembolsoMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
+
   const ganancia = Number(t.estimado || 0) - materiales - manoDeObra;
   // Si ya se sabe cuánto pagó realmente el cliente (a veces es menos del estimado), la ganancia real usa ese monto
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
@@ -353,6 +367,7 @@ function calcTrabajo(t, data) {
     materialesAportadosPorCliente,
     manoDeObra,
     desglose,
+    reembolsoPorPersona,
     ganancia,
     porSocio: ganancia / 2,
     tienePagoReal,
@@ -740,6 +755,16 @@ function Trabajos({ data, update }) {
                   {c.materialesAportadosPorCliente > 0 && (
                     <Row label="Materiales que puso el cliente (no afecta)" value={money(c.materialesAportadosPorCliente)} />
                   )}
+                  {c.reembolsoPorPersona.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.reembolsoPorPersona.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: AMBER }}>
+                          <span>Reembolsar a {r.nombre} por {r.tipoLabel}</span>
+                          <span className="mono">{money(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <Row label="Ganancia según estimado" value={money(c.ganancia)} bold={!c.tienePagoReal} accent={c.ganancia >= 0 ? GREEN : RED} />
 
                   <div className="mt-2 mb-1">
@@ -1063,6 +1088,8 @@ function Bitacora({ data, update }) {
   const [extraTemp, setExtraTemp] = useState("");
   const [pagoAbiertoId, setPagoAbiertoId] = useState(null);
   const [pagoForm, setPagoForm] = useState({});
+  const [pagoEditandoId, setPagoEditandoId] = useState(null);
+  const [pagoEditForm, setPagoEditForm] = useState({});
 
   const addEntrada = () => {
     if (!form?.trabajoId || !form?.descripcion) return;
@@ -1110,6 +1137,14 @@ function Bitacora({ data, update }) {
     });
   };
 
+  // Quita un participante puntual (sirve también para los "huérfanos" sin nombre que quedaron de la migración vieja)
+  const quitarParticipante = (bitId, tipo, ref) => {
+    update((d) => {
+      const entrada = d.bitacora.find((x) => x.id === bitId);
+      entrada.participantes = (entrada.participantes || []).filter((p) => !(p.tipo === tipo && p.ref === ref));
+    });
+  };
+
   const addExtraGuardado = (bitId, nombre) => {
     if (!nombre.trim()) return;
     update((d) => {
@@ -1150,9 +1185,25 @@ function Bitacora({ data, update }) {
     setPagoForm({});
   };
 
-  const entradas = [...data.bitacora]
+  // Agrupamos por trabajo (cada grupo ordenado por fecha), y ordenamos los grupos por su actividad más reciente,
+  // para que cada trabajo quede junto y separado visualmente del siguiente.
+  const entradasOrdenadas = [...data.bitacora]
     .filter((b) => !filtroTrabajo || b.trabajoId === filtroTrabajo)
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
+  const ultimaFechaPorTrabajo = {};
+  entradasOrdenadas.forEach((b) => {
+    if (!ultimaFechaPorTrabajo[b.trabajoId] || b.fecha > ultimaFechaPorTrabajo[b.trabajoId]) {
+      ultimaFechaPorTrabajo[b.trabajoId] = b.fecha;
+    }
+  });
+
+  const entradas = [...entradasOrdenadas].sort((a, b) => {
+    if (a.trabajoId !== b.trabajoId) {
+      return ultimaFechaPorTrabajo[b.trabajoId] < ultimaFechaPorTrabajo[a.trabajoId] ? -1 : 1;
+    }
+    return a.fecha < b.fecha ? 1 : -1;
+  });
 
   return (
     <div>
@@ -1280,36 +1331,53 @@ function Bitacora({ data, update }) {
 
       <div className="space-y-2">
         {entradas.length === 0 && <Empty text="Sin actividad registrada todavía." />}
-        {entradas.map((b) => {
+        {entradas.map((b, i) => {
           const trab = data.trabajos.find((t) => t.id === b.trabajoId);
           const participantes = b.participantes || [];
           const pagosDeEstaActividad = (b.nominaIds || []).map((id) => data.nomina.find((n) => n.id === id)).filter(Boolean);
+          const esNuevoGrupo = i === 0 || entradas[i - 1].trabajoId !== b.trabajoId;
 
           return (
-            <div key={b.id} className="card p-4">
+            <React.Fragment key={b.id}>
+              {esNuevoGrupo && (
+                <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                  <span className="stamp text-[12px] text-[#1E2A38]">{trab?.apodo || trab?.nombre || "Sin trabajo"}</span>
+                  <div className="flex-1 h-px" style={{ background: AMBER }} />
+                </div>
+              )}
+            <div className="card p-4">
               <div className="flex justify-between items-start mb-1">
                 <div className="font-medium text-sm">{trab?.apodo || trab?.nombre || "—"}</div>
                 <div className="text-[11px] text-[#7A7263]">{fmtDate(b.fecha)}</div>
               </div>
               <p className="text-sm text-[#4A4238] mb-2">{b.descripcion}</p>
 
-              {/* Participantes con su propio estado — clic para Pendiente/Completado */}
+              {/* Participantes con su propio estado — clic para Pendiente/Completado, X para quitar */}
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {participantes.map((p) => {
                   const completado = p.estado === "completado";
                   return (
-                    <button
+                    <span
                       key={p.tipo + p.ref}
-                      onClick={() => toggleEstadoParticipante(b.id, p.tipo, p.ref)}
-                      className="text-[11px] font-medium px-2 py-1 border"
+                      className="text-[11px] font-medium pl-2 pr-1 py-1 border flex items-center gap-1"
                       style={{
                         borderColor: completado ? GREEN : "#A13D2E",
                         background: completado ? "#DDEEDF" : "#F7DEDA",
                         color: completado ? GREEN : "#A13D2E",
                       }}
                     >
-                      {nombreParticipante(data, p)} · {completado ? "Completado" : "Pendiente"}
-                    </button>
+                      <button type="button" onClick={() => toggleEstadoParticipante(b.id, p.tipo, p.ref)}>
+                        {nombreParticipante(data, p)} · {completado ? "Completado" : "Pendiente"}
+                      </button>
+                      <button
+                        type="button"
+                        title="Quitar de esta actividad"
+                        onClick={() => quitarParticipante(b.id, p.tipo, p.ref)}
+                        style={{ color: completado ? GREEN : "#A13D2E" }}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
                   );
                 })}
                 <button
@@ -1376,28 +1444,77 @@ function Bitacora({ data, update }) {
               )}
 
               {pagosDeEstaActividad.length > 0 && (
-                <div className="mb-2 space-y-0.5">
+                <div className="mb-2 space-y-1">
                   {pagosDeEstaActividad.map((pago) => {
                     const empleado = data.empleados.find((e) => e.id === pago.empleadoId);
+                    if (pagoEditandoId === pago.id) {
+                      return (
+                        <div key={pago.id} className="border p-2 space-y-2" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                          <select className="ledger-input text-xs" value={pagoEditForm.empleadoId || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, empleadoId: e.target.value })}>
+                            <option value="">¿A quién se le pagó?</option>
+                            {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                          </select>
+                          <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoEditForm.monto || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, monto: e.target.value })} />
+                          <select className="ledger-input text-xs" value={pagoEditForm.pagadoPor || "empresa"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, pagadoPor: e.target.value })}>
+                            <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                            {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                          </select>
+                          <select className="ledger-input text-xs" value={pagoEditForm.cuentaId || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, cuentaId: e.target.value })}>
+                            <option value="">Cuenta bancaria…</option>
+                            {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                          </select>
+                          <div className="flex gap-2">
+                            <button
+                              className="btn-primary"
+                              onClick={() => {
+                                update((d) => {
+                                  const p = d.nomina.find((x) => x.id === pago.id);
+                                  p.empleadoId = pagoEditForm.empleadoId;
+                                  p.monto = Number(pagoEditForm.monto);
+                                  p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
+                                  p.cuentaId = pagoEditForm.cuentaId || "";
+                                });
+                                setPagoEditandoId(null);
+                              }}
+                            >
+                              <Check size={13} /> Guardar
+                            </button>
+                            <button className="text-xs text-[#7A7263] px-2" onClick={() => setPagoEditandoId(null)}>Cancelar</button>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div key={pago.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
                         <span>
                           Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
                           {pago.reembolsado ? " · reembolsado" : ""}
                         </span>
-                        <button
-                          className="text-[#A13D2E] ml-2 shrink-0"
-                          title="Eliminar este pago"
-                          onClick={() =>
-                            update((d) => {
-                              d.nomina = d.nomina.filter((n) => n.id !== pago.id);
-                              const entrada = d.bitacora.find((x) => x.id === b.id);
-                              entrada.nominaIds = (entrada.nominaIds || []).filter((id) => id !== pago.id);
-                            })
-                          }
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        <span className="flex items-center gap-2 shrink-0 ml-2">
+                          <button
+                            className="text-[#7A7263]"
+                            title="Editar este pago"
+                            onClick={() => {
+                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "" });
+                              setPagoEditandoId(pago.id);
+                            }}
+                          >
+                            <PenLine size={12} />
+                          </button>
+                          <button
+                            className="text-[#A13D2E]"
+                            title="Eliminar este pago"
+                            onClick={() =>
+                              update((d) => {
+                                d.nomina = d.nomina.filter((n) => n.id !== pago.id);
+                                const entrada = d.bitacora.find((x) => x.id === b.id);
+                                entrada.nominaIds = (entrada.nominaIds || []).filter((id) => id !== pago.id);
+                              })
+                            }
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </span>
                       </div>
                     );
                   })}
@@ -1442,6 +1559,7 @@ function Bitacora({ data, update }) {
                 </button>
               </div>
             </div>
+            </React.Fragment>
           );
         })}
       </div>
@@ -1975,7 +2093,16 @@ function Materiales({ data, update, onViewPhoto }) {
                   </div>
                 </div>
               </div>
-              <span className="mono">{money(m.monto)}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="mono">{money(m.monto)}</span>
+                <button
+                  className="text-[#A13D2E]"
+                  title="Eliminar material"
+                  onClick={() => update((d) => { d.materiales = d.materiales.filter((x) => x.id !== m.id); })}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -2006,6 +2133,8 @@ function Cuentas({ data, update }) {
         monto: Number(incomeForm.monto),
         fecha: incomeForm.fecha || todayISO(),
         concepto: incomeForm.concepto || "Pago de cliente",
+        formaPago: incomeForm.formaPago || "efectivo",
+        numeroCheque: incomeForm.formaPago === "cheque" ? (incomeForm.numeroCheque || "") : "",
       })
     );
     setIncomeForm(null);
@@ -2020,9 +2149,16 @@ function Cuentas({ data, update }) {
         aCuentaId: transferForm.aCuentaId,
         monto: Number(transferForm.monto),
         fecha: transferForm.fecha || todayISO(),
+        formaPago: transferForm.formaPago || "efectivo",
+        numeroCheque: transferForm.formaPago === "cheque" ? (transferForm.numeroCheque || "") : "",
       })
     );
     setTransferForm(null);
+  };
+
+  const formaPagoTexto = (fp, numCheque) => {
+    const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : "Efectivo";
+    return fp === "cheque" && numCheque ? `${base} #${numCheque}` : base;
   };
 
   return (
@@ -2069,7 +2205,7 @@ function Cuentas({ data, update }) {
         <div className="card p-4">
           <div className="stamp text-[13px] text-[#7A7263] mb-3">INGRESO DE CLIENTE</div>
           {!incomeForm ? (
-            <button className="btn-primary" onClick={() => setIncomeForm({ fecha: todayISO() })} disabled={data.cuentas.length === 0}><Plus size={14} /> Ingreso</button>
+            <button className="btn-primary" onClick={() => setIncomeForm({ fecha: todayISO(), formaPago: "efectivo" })} disabled={data.cuentas.length === 0}><Plus size={14} /> Ingreso</button>
           ) : (
             <div className="space-y-2">
               <select className="ledger-input" value={incomeForm.cuentaId || ""} onChange={(e) => setIncomeForm({ ...incomeForm, cuentaId: e.target.value })}>
@@ -2082,10 +2218,36 @@ function Cuentas({ data, update }) {
               </select>
               <input className="ledger-input" type="number" placeholder="Monto" value={incomeForm.monto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, monto: e.target.value })} />
               <input className="ledger-input" type="date" value={incomeForm.fecha} onChange={(e) => setIncomeForm({ ...incomeForm, fecha: e.target.value })} />
+              <select className="ledger-input" value={incomeForm.formaPago || "efectivo"} onChange={(e) => setIncomeForm({ ...incomeForm, formaPago: e.target.value })}>
+                <option value="efectivo">Efectivo</option>
+                <option value="cheque">Cheque</option>
+                <option value="zelle">Zelle</option>
+              </select>
+              {incomeForm.formaPago === "cheque" && (
+                <input className="ledger-input" placeholder="Número de cheque" value={incomeForm.numeroCheque || ""} onChange={(e) => setIncomeForm({ ...incomeForm, numeroCheque: e.target.value })} />
+              )}
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addIngreso}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setIncomeForm(null)}>Cancelar</button>
               </div>
+            </div>
+          )}
+          {data.ingresos.length > 0 && (
+            <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${LINE}` }}>
+              {[...data.ingresos].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((ing) => {
+                const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
+                return (
+                  <div key={ing.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
+                    <span>{fmtDate(ing.fecha)} · {cuenta?.nombre || "—"} · {formaPagoTexto(ing.formaPago, ing.numeroCheque)}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="mono" style={{ color: GREEN }}>{money(ing.monto)}</span>
+                      <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
+                        <Trash2 size={11} />
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2093,7 +2255,7 @@ function Cuentas({ data, update }) {
         <div className="card p-4">
           <div className="stamp text-[13px] text-[#7A7263] mb-3">TRANSFERENCIA ENTRE CUENTAS</div>
           {!transferForm ? (
-            <button className="btn-primary" onClick={() => setTransferForm({ fecha: todayISO() })} disabled={data.cuentas.length < 2}><Plus size={14} /> Transferencia</button>
+            <button className="btn-primary" onClick={() => setTransferForm({ fecha: todayISO(), formaPago: "efectivo" })} disabled={data.cuentas.length < 2}><Plus size={14} /> Transferencia</button>
           ) : (
             <div className="space-y-2">
               <select className="ledger-input" value={transferForm.deCuentaId || ""} onChange={(e) => setTransferForm({ ...transferForm, deCuentaId: e.target.value })}>
@@ -2106,10 +2268,37 @@ function Cuentas({ data, update }) {
               </select>
               <input className="ledger-input" type="number" placeholder="Monto" value={transferForm.monto || ""} onChange={(e) => setTransferForm({ ...transferForm, monto: e.target.value })} />
               <input className="ledger-input" type="date" value={transferForm.fecha} onChange={(e) => setTransferForm({ ...transferForm, fecha: e.target.value })} />
+              <select className="ledger-input" value={transferForm.formaPago || "efectivo"} onChange={(e) => setTransferForm({ ...transferForm, formaPago: e.target.value })}>
+                <option value="efectivo">Efectivo</option>
+                <option value="cheque">Cheque</option>
+                <option value="zelle">Zelle</option>
+              </select>
+              {transferForm.formaPago === "cheque" && (
+                <input className="ledger-input" placeholder="Número de cheque" value={transferForm.numeroCheque || ""} onChange={(e) => setTransferForm({ ...transferForm, numeroCheque: e.target.value })} />
+              )}
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addTransfer}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setTransferForm(null)}>Cancelar</button>
               </div>
+            </div>
+          )}
+          {data.transferencias.length > 0 && (
+            <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${LINE}` }}>
+              {[...data.transferencias].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((tr) => {
+                const de = data.cuentas.find((c) => c.id === tr.deCuentaId);
+                const a = data.cuentas.find((c) => c.id === tr.aCuentaId);
+                return (
+                  <div key={tr.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
+                    <span>{fmtDate(tr.fecha)} · {de?.nombre || "—"} → {a?.nombre || "—"} · {formaPagoTexto(tr.formaPago, tr.numeroCheque)}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="mono">{money(tr.monto)}</span>
+                      <button className="text-[#A13D2E]" onClick={() => update((d) => { d.transferencias = d.transferencias.filter((x) => x.id !== tr.id); })}>
+                        <Trash2 size={11} />
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2222,17 +2411,17 @@ function Reportes({ data, update }) {
                 <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3">
                   <Row label="Estimado" value={money(Number(t.estimado))} />
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
-                  {c.desglose.length > 0 && (
+                  <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
+                  {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
-                      {c.desglose.map((d, i) => (
-                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
-                          <span>{d.nombre} · {d.tipoLabel}</span>
-                          <span className="mono">{money(d.monto)}</span>
+                      {c.reembolsoPorPersona.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: AMBER }}>
+                          <span>Reembolsar a {r.nombre} por {r.tipoLabel}</span>
+                          <span className="mono">{money(r.monto)}</span>
                         </div>
                       ))}
                     </div>
                   )}
-                  <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   <Row label="Ganancia total" value={money(c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
                   <div className="grid grid-cols-2 gap-2 my-2">
                     {data.socios.map((s) => (
@@ -2379,7 +2568,7 @@ function ReciboModal({ trabajo, data, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white w-full max-w-md my-4">
-        <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38]">
+        <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38] sticky top-0 z-10">
           <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
           <button onClick={onClose} className="text-white"><X size={20} /></button>
         </div>
@@ -2397,6 +2586,9 @@ function ReciboModal({ trabajo, data, onClose }) {
 
           <div className="text-center mb-2">
             <div className="text-xl font-bold uppercase">{trabajo.nombre}</div>
+            {trabajo.numeroTrabajo && (
+              <div className="text-sm mt-0.5" style={{ color: "#666" }}>Trabajo #{trabajo.numeroTrabajo}</div>
+            )}
           </div>
 
           <div className="recibo-linea" />
@@ -2426,6 +2618,48 @@ function ReciboModal({ trabajo, data, onClose }) {
               <>
                 <span className="text-xs uppercase" style={{ color: "#888" }}>Dirección</span>
                 <span className="text-sm">{trabajo.direccion}</span>
+              </>
+            )}
+          </div>
+
+          <div className="recibo-linea" />
+
+          <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
+          {trabajo.descripcionTrabajo && (
+            <div className="mb-3">
+              <div className="text-xs font-bold uppercase mb-1" style={{ color: "#888" }}>Trabajo a realizar</div>
+              <ol className="text-sm space-y-0.5 pl-4" style={{ listStyleType: "decimal" }}>
+                {trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).map((linea, i) => (
+                  <li key={i}>{linea}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "3px", columnGap: "10px" }}>
+            {trabajo.fecha && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Inicio</span>
+                <span className="text-sm">{fmtDate(trabajo.fecha)}</span>
+              </>
+            )}
+            {trabajo.fechaTerminado && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Finalizado</span>
+                <span className="text-sm">{fmtDate(trabajo.fechaTerminado)}</span>
+              </>
+            )}
+            {trabajo.fecha && trabajo.fechaTerminado && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Duración</span>
+                <span className="text-sm">
+                  {Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s)
+                </span>
+              </>
+            )}
+            {trabajo.diasEstimados && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Estimado de tiempo</span>
+                <span className="text-sm">{trabajo.diasEstimados} día(s)</span>
               </>
             )}
           </div>
