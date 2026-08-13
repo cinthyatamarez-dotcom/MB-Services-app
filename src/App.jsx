@@ -2480,6 +2480,7 @@ function ReciboModal({ trabajo, data, onClose }) {
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
+  const bitacoraT = data.bitacora.filter((b) => b.trabajoId === trabajo.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
   // Reembolsos pendientes de ESTE trabajo únicamente (socios o trabajadores que pagaron de su bolsa)
@@ -2506,7 +2507,7 @@ function ReciboModal({ trabajo, data, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white w-full max-w-md my-4">
-        <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38]">
+        <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38] sticky top-0 z-10">
           <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
           <button onClick={onClose} className="text-white"><X size={20} /></button>
         </div>
@@ -2556,6 +2557,52 @@ function ReciboModal({ trabajo, data, onClose }) {
               </>
             )}
           </div>
+
+          <div className="recibo-linea" />
+
+          <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
+          {trabajo.descripcionTrabajo && (
+            <div className="text-sm mb-2" style={{ whiteSpace: "pre-line" }}>{trabajo.descripcionTrabajo}</div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "3px", columnGap: "10px" }}>
+            {trabajo.fecha && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Inicio</span>
+                <span className="text-sm">{fmtDate(trabajo.fecha)}</span>
+              </>
+            )}
+            {trabajo.fechaTerminado && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Finalizado</span>
+                <span className="text-sm">{fmtDate(trabajo.fechaTerminado)}</span>
+              </>
+            )}
+            {trabajo.fecha && trabajo.fechaTerminado && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Duración</span>
+                <span className="text-sm">
+                  {Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s)
+                </span>
+              </>
+            )}
+            {trabajo.diasEstimados && (
+              <>
+                <span className="text-xs uppercase" style={{ color: "#888" }}>Estimado de tiempo</span>
+                <span className="text-sm">{trabajo.diasEstimados} día(s)</span>
+              </>
+            )}
+          </div>
+
+          {bitacoraT.length > 0 && (
+            <>
+              <div className="text-xs font-bold uppercase mt-3 mb-1" style={{ color: "#888" }}>Actividad diaria</div>
+              {bitacoraT.map((b) => (
+                <div key={b.id} className="text-sm mb-1.5">
+                  <span className="font-bold">{fmtDate(b.fecha)}</span> — {b.descripcion}
+                </div>
+              ))}
+            </>
+          )}
 
           <div className="recibo-linea" />
 
