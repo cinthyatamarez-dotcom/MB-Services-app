@@ -575,6 +575,8 @@ function Trabajos({ data, update }) {
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [orden, setOrden] = useState("numero"); // "numero" = orden en que se agregaron, "abecedario" = A-Z
+  const [materialesTrabajo, setMaterialesTrabajo] = useState(null);
+  const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
 
   const addTrabajo = () => {
     if (!form?.nombre) return;
@@ -940,12 +942,22 @@ function Trabajos({ data, update }) {
                       <Trash2 size={13} /> Eliminar
                     </button>
                   </div>
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    <button className="text-[11px] text-[#7A7263] underline flex items-center gap-1" onClick={() => setMaterialesTrabajo(t)}>
+                      <Printer size={12} /> Imprimir/descargar materiales
+                    </button>
+                    <button className="text-[11px] text-[#7A7263] underline flex items-center gap-1" onClick={() => setBitacoraTrabajo(t)}>
+                      <Printer size={12} /> Imprimir/descargar bitácora
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           );
         })}
       </div>
+      {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
+      {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
     </div>
   );
 }
@@ -2116,6 +2128,7 @@ function Cuentas({ data, update }) {
   const [form, setForm] = useState(null);
   const [transferForm, setTransferForm] = useState(null);
   const [incomeForm, setIncomeForm] = useState(null);
+  const [cuentaModal, setCuentaModal] = useState(null);
 
   const addCuenta = () => {
     if (!form?.nombre) return;
@@ -2181,6 +2194,12 @@ function Cuentas({ data, update }) {
               </div>
               <div className="mono text-lg font-semibold mt-2" style={{ color: saldo >= 0 ? GREEN : RED }}>{money(saldo)}</div>
               <div className="text-[10px] uppercase tracking-widest text-[#7A7263]">saldo actual</div>
+              <button
+                className="text-[11px] text-[#7A7263] underline flex items-center gap-1 mt-2"
+                onClick={() => setCuentaModal(c)}
+              >
+                <Printer size={12} /> Imprimir/descargar movimientos
+              </button>
             </div>
           );
         })}
@@ -2303,6 +2322,7 @@ function Cuentas({ data, update }) {
           )}
         </div>
       </div>
+      {cuentaModal && <CuentaMovimientosModal cuenta={cuentaModal} data={data} onClose={() => setCuentaModal(null)} />}
     </div>
   );
 }
@@ -2537,6 +2557,125 @@ function SociosModal({ data, update, onClose }) {
 }
 
 /* ---------------- Recibo grande, estilo tique de ferretería ---------------- */
+/* ---------------- Hojas imprimibles sencillas (materiales/bitácora por trabajo, movimientos por cuenta) ---------------- */
+function HojaImprimible({ titulo, subtitulo, onClose, children }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
+      <div className="bg-white w-full max-w-md my-4">
+        <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38] sticky top-0 z-10">
+          <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
+          <button onClick={onClose} className="text-white"><X size={20} /></button>
+        </div>
+        <div id="recibo-print" className="p-6" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#111" }}>
+          <div className="text-center mb-4">
+            <Receipt size={28} className="mx-auto mb-1" />
+            <div style={{ fontFamily: "'Special Elite', monospace" }} className="text-xl font-bold uppercase tracking-wide">{titulo}</div>
+            {subtitulo && <div className="text-sm mt-1">{subtitulo}</div>}
+          </div>
+          <div className="recibo-linea" />
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MaterialesTrabajoModal({ trabajo, data, onClose }) {
+  const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  const total = materialesT.reduce((s, m) => s + Number(m.monto), 0);
+  return (
+    <HojaImprimible titulo="Materiales" subtitulo={trabajo.apodo || trabajo.nombre} onClose={onClose}>
+      {materialesT.length === 0 && <div className="text-sm py-2">— sin materiales registrados —</div>}
+      {materialesT.map((m) => (
+        <div key={m.id} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
+          <div className="flex justify-between text-base">
+            <span className="pr-2">{m.descripcion}</span>
+            <span className="whitespace-nowrap font-semibold">{money(m.monto)}</span>
+          </div>
+          <div className="text-xs" style={{ color: "#888" }}>
+            {fmtDate(m.fecha)} · pagado por {pagadorNombre(data, m.pagadoPor)}
+          </div>
+        </div>
+      ))}
+      <div className="recibo-linea" />
+      <div className="flex justify-between text-lg font-bold">
+        <span>TOTAL</span>
+        <span>{money(total)}</span>
+      </div>
+    </HojaImprimible>
+  );
+}
+
+function BitacoraTrabajoModal({ trabajo, data, onClose }) {
+  const bitacoraT = data.bitacora.filter((b) => b.trabajoId === trabajo.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
+  return (
+    <HojaImprimible titulo="Actividad diaria" subtitulo={trabajo.apodo || trabajo.nombre} onClose={onClose}>
+      {bitacoraT.length === 0 && <div className="text-sm py-2">— sin actividad registrada —</div>}
+      {bitacoraT.map((b) => {
+        const participantes = b.participantes || [];
+        return (
+          <div key={b.id} className="py-2" style={{ borderBottom: "1px dashed #ccc" }}>
+            <div className="text-sm font-bold">{fmtDate(b.fecha)}</div>
+            <div className="text-sm mb-1">{b.descripcion}</div>
+            {participantes.length > 0 && (
+              <div className="text-xs" style={{ color: "#666" }}>
+                {participantes.map((p) => `${nombreParticipante(data, p)} (${p.estado === "completado" ? "completado" : "pendiente"})`).join(" · ")}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </HojaImprimible>
+  );
+}
+
+function CuentaMovimientosModal({ cuenta, data, onClose }) {
+  const ingresosC = data.ingresos.filter((i) => i.cuentaId === cuenta.id);
+  const transfSalida = data.transferencias.filter((t) => t.deCuentaId === cuenta.id);
+  const transfEntrada = data.transferencias.filter((t) => t.aCuentaId === cuenta.id);
+  const materialesC = data.materiales.filter((m) => m.cuentaId === cuenta.id);
+  const nominaC = data.nomina.filter((n) => n.cuentaId === cuenta.id);
+
+  const movimientos = [
+    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: i.concepto, monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
+    ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}`, monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}`, monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...materialesC.map((m) => ({ fecha: m.fecha, tipo: "Material", detalle: m.descripcion, monto: m.monto, signo: -1, formaPago: "" })),
+    ...nominaC.map((n) => ({ fecha: n.fecha, tipo: "Nómina", detalle: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—", monto: n.monto, signo: -1, formaPago: "" })),
+  ].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
+  const saldo = calcCuentaSaldo(cuenta, data);
+
+  return (
+    <HojaImprimible titulo="Movimientos de cuenta" subtitulo={cuenta.nombre} onClose={onClose}>
+      {movimientos.length === 0 && <div className="text-sm py-2">— sin movimientos —</div>}
+      {movimientos.map((m, i) => (
+        <div key={i} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
+          <div className="flex justify-between text-base">
+            <span className="pr-2">{m.tipo}{m.detalle ? ` — ${m.detalle}` : ""}</span>
+            <span className="whitespace-nowrap font-semibold" style={{ color: m.signo > 0 ? "#1E6B3E" : "#A13D2E" }}>
+              {m.signo > 0 ? "+" : "-"}{money(m.monto)}
+            </span>
+          </div>
+          <div className="text-xs" style={{ color: "#888" }}>{fmtDate(m.fecha)}{m.formaPago ? ` · ${m.formaPago}` : ""}</div>
+        </div>
+      ))}
+      <div className="recibo-linea" />
+      <div className="flex justify-between text-lg font-bold">
+        <span>SALDO ACTUAL</span>
+        <span>{money(saldo)}</span>
+      </div>
+    </HojaImprimible>
+  );
+}
+
+// Versión standalone de formaPagoTexto (fuera del componente Cuentas) para usar en el modal de movimientos
+function formaPagoTextoStandalone(fp, numCheque) {
+  if (!fp) return "";
+  const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : "Efectivo";
+  return fp === "cheque" && numCheque ? `${base} #${numCheque}` : base;
+}
+
 function ReciboModal({ trabajo, data, onClose }) {
   const c = calcTrabajo(trabajo, data);
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
