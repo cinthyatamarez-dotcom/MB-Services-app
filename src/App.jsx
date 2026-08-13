@@ -344,6 +344,20 @@ function calcTrabajo(t, data) {
   nominaItems.forEach((n) => acumular(n, "Nómina"));
   const desglose = Object.values(desgloseMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
+  // Cuánto reembolsarle a cada persona, separado por materiales y por nómina — no incluye lo que puso
+  // la empresa (a la empresa no hay que reembolsarle) ni lo que puso el cliente.
+  const reembolsoMap = {};
+  const acumularReembolso = (item, tipoLabel) => {
+    const pagador = item.pagadoPor || "empresa";
+    if (pagador === "empresa" || pagador === "cliente") return;
+    const key = pagador + "|" + tipoLabel;
+    if (!reembolsoMap[key]) reembolsoMap[key] = { nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
+    reembolsoMap[key].monto += Number(item.monto);
+  };
+  materialesPropios.forEach((m) => acumularReembolso(m, "materiales"));
+  nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
+  const reembolsoPorPersona = Object.values(reembolsoMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
+
   const ganancia = Number(t.estimado || 0) - materiales - manoDeObra;
   // Si ya se sabe cuánto pagó realmente el cliente (a veces es menos del estimado), la ganancia real usa ese monto
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
@@ -353,6 +367,7 @@ function calcTrabajo(t, data) {
     materialesAportadosPorCliente,
     manoDeObra,
     desglose,
+    reembolsoPorPersona,
     ganancia,
     porSocio: ganancia / 2,
     tienePagoReal,
@@ -739,6 +754,16 @@ function Trabajos({ data, update }) {
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   {c.materialesAportadosPorCliente > 0 && (
                     <Row label="Materiales que puso el cliente (no afecta)" value={money(c.materialesAportadosPorCliente)} />
+                  )}
+                  {c.reembolsoPorPersona.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.reembolsoPorPersona.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: AMBER }}>
+                          <span>Reembolsar a {r.nombre} por {r.tipoLabel}</span>
+                          <span className="mono">{money(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
                   <Row label="Ganancia según estimado" value={money(c.ganancia)} bold={!c.tienePagoReal} accent={c.ganancia >= 0 ? GREEN : RED} />
 
@@ -1160,9 +1185,25 @@ function Bitacora({ data, update }) {
     setPagoForm({});
   };
 
-  const entradas = [...data.bitacora]
+  // Agrupamos por trabajo (cada grupo ordenado por fecha), y ordenamos los grupos por su actividad más reciente,
+  // para que cada trabajo quede junto y separado visualmente del siguiente.
+  const entradasOrdenadas = [...data.bitacora]
     .filter((b) => !filtroTrabajo || b.trabajoId === filtroTrabajo)
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
+  const ultimaFechaPorTrabajo = {};
+  entradasOrdenadas.forEach((b) => {
+    if (!ultimaFechaPorTrabajo[b.trabajoId] || b.fecha > ultimaFechaPorTrabajo[b.trabajoId]) {
+      ultimaFechaPorTrabajo[b.trabajoId] = b.fecha;
+    }
+  });
+
+  const entradas = [...entradasOrdenadas].sort((a, b) => {
+    if (a.trabajoId !== b.trabajoId) {
+      return ultimaFechaPorTrabajo[b.trabajoId] < ultimaFechaPorTrabajo[a.trabajoId] ? -1 : 1;
+    }
+    return a.fecha < b.fecha ? 1 : -1;
+  });
 
   return (
     <div>
@@ -1290,13 +1331,21 @@ function Bitacora({ data, update }) {
 
       <div className="space-y-2">
         {entradas.length === 0 && <Empty text="Sin actividad registrada todavía." />}
-        {entradas.map((b) => {
+        {entradas.map((b, i) => {
           const trab = data.trabajos.find((t) => t.id === b.trabajoId);
           const participantes = b.participantes || [];
           const pagosDeEstaActividad = (b.nominaIds || []).map((id) => data.nomina.find((n) => n.id === id)).filter(Boolean);
+          const esNuevoGrupo = i === 0 || entradas[i - 1].trabajoId !== b.trabajoId;
 
           return (
-            <div key={b.id} className="card p-4">
+            <React.Fragment key={b.id}>
+              {esNuevoGrupo && (
+                <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+                  <span className="stamp text-[12px] text-[#1E2A38]">{trab?.apodo || trab?.nombre || "Sin trabajo"}</span>
+                  <div className="flex-1 h-px" style={{ background: AMBER }} />
+                </div>
+              )}
+            <div className="card p-4">
               <div className="flex justify-between items-start mb-1">
                 <div className="font-medium text-sm">{trab?.apodo || trab?.nombre || "—"}</div>
                 <div className="text-[11px] text-[#7A7263]">{fmtDate(b.fecha)}</div>
@@ -1510,6 +1559,7 @@ function Bitacora({ data, update }) {
                 </button>
               </div>
             </div>
+            </React.Fragment>
           );
         })}
       </div>
@@ -2043,7 +2093,16 @@ function Materiales({ data, update, onViewPhoto }) {
                   </div>
                 </div>
               </div>
-              <span className="mono">{money(m.monto)}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="mono">{money(m.monto)}</span>
+                <button
+                  className="text-[#A13D2E]"
+                  title="Eliminar material"
+                  onClick={() => update((d) => { d.materiales = d.materiales.filter((x) => x.id !== m.id); })}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -2290,17 +2349,17 @@ function Reportes({ data, update }) {
                 <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3">
                   <Row label="Estimado" value={money(Number(t.estimado))} />
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
-                  {c.desglose.length > 0 && (
+                  <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
+                  {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
-                      {c.desglose.map((d, i) => (
-                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
-                          <span>{d.nombre} · {d.tipoLabel}</span>
-                          <span className="mono">{money(d.monto)}</span>
+                      {c.reembolsoPorPersona.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: AMBER }}>
+                          <span>Reembolsar a {r.nombre} por {r.tipoLabel}</span>
+                          <span className="mono">{money(r.monto)}</span>
                         </div>
                       ))}
                     </div>
                   )}
-                  <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   <Row label="Ganancia total" value={money(c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
                   <div className="grid grid-cols-2 gap-2 my-2">
                     {data.socios.map((s) => (
