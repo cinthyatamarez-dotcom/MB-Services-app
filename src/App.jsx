@@ -42,13 +42,15 @@ function compressImage(file, maxWidth = 1000, quality = 0.6) {
   });
 }
 
-// Le pide a la IA que lea la foto de la factura y devuelva los renglones estructurados
-async function extraerFacturaConIA(dataUrl) {
-  const base64 = dataUrl.split(",")[1];
+// Le pide a la IA que lea la(s) foto(s) de la factura y devuelva los renglones estructurados.
+// Acepta un arreglo de fotos (dataURL) por si la factura tiene varias hojas — se leen juntas como una sola.
+async function extraerFacturaConIA(dataUrls) {
+  const fotos = Array.isArray(dataUrls) ? dataUrls : [dataUrls];
+  const images = fotos.map((d) => d.split(",")[1]);
   const response = await fetch("/api/scan-invoice", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image: base64 }),
+    body: JSON.stringify({ images }),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data?.error || "Error de la IA");
@@ -1856,15 +1858,18 @@ function Materiales({ data, update, onViewPhoto }) {
   };
 
   const handleEscaneo = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setScan({ status: "loading" });
     try {
-      const foto = await compressImage(file, 1400, 0.72);
-      const parsed = await extraerFacturaConIA(foto);
+      const fotos = [];
+      for (const file of files) {
+        fotos.push(await compressImage(file, 1400, 0.72));
+      }
+      const parsed = await extraerFacturaConIA(fotos);
       setScan({
         status: "review",
-        foto,
+        fotos,
         tienda: parsed.tienda || "",
         fecha: parsed.fecha || todayISO(),
         items: parsed.items.map((it) => ({
@@ -1882,6 +1887,7 @@ function Materiales({ data, update, onViewPhoto }) {
     } catch (err) {
       setScan({ status: "error", errorMsg: "No pude leer la factura bien. Intenta con más luz o registra manualmente." });
     }
+    e.target.value = "";
   };
 
   const guardarEscaneo = () => {
@@ -1899,7 +1905,7 @@ function Materiales({ data, update, onViewPhoto }) {
           pagadoPor: pagadoPorFinal,
           cuentaId: scan.cuentaId || "",
           reembolsado: false,
-          foto: scan.foto,
+          fotos: scan.fotos || [],
           numeroProducto: it.numeroProducto || "",
           cantidad: it.cantidad || 1,
         });
@@ -1922,7 +1928,7 @@ function Materiales({ data, update, onViewPhoto }) {
         <div className="flex flex-wrap gap-2 mb-4">
           <label className="btn-primary cursor-pointer">
             <Sparkles size={15} /> Escanear factura (IA)
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleEscaneo} />
+            <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleEscaneo} />
           </label>
           <button
             className="text-sm flex items-center gap-1 px-3 border"
@@ -1932,6 +1938,9 @@ function Materiales({ data, update, onViewPhoto }) {
             <PenLine size={14} /> Captura manual
           </button>
         </div>
+      )}
+      {!form && !scan && (
+        <p className="text-[11px] text-[#7A7263] -mt-3 mb-4">Si la factura tiene varias hojas, selecciona todas las fotos juntas al escanear — se leen como una sola.</p>
       )}
 
       {/* ---- Flujo de escaneo con IA ---- */}
@@ -1952,7 +1961,13 @@ function Materiales({ data, update, onViewPhoto }) {
       {scan?.status === "review" && (
         <div className="card p-4 mb-4">
           <div className="flex gap-3 mb-3">
-            {scan.foto && <img src={scan.foto} alt="Factura escaneada" className="w-16 h-16 object-cover border shrink-0" style={{ borderColor: LINE }} />}
+            {scan.fotos?.length > 0 && (
+              <div className="flex gap-1 shrink-0">
+                {scan.fotos.map((f, i) => (
+                  <img key={i} src={f} alt={`Página ${i + 1}`} className="w-16 h-16 object-cover border" style={{ borderColor: LINE }} />
+                ))}
+              </div>
+            )}
             <div className="flex-1 space-y-2">
               <input className="ledger-input" placeholder="Tienda" value={scan.tienda} onChange={(e) => setScan({ ...scan, tienda: e.target.value })} />
               <input className="ledger-input" type="date" value={scan.fecha} onChange={(e) => setScan({ ...scan, fecha: e.target.value })} />
