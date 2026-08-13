@@ -324,37 +324,42 @@ function SectionTitle({ children, sub }) {
 }
 
 /* ---------------- calculations ---------------- */
+// El monto real de un material, restando lo que se haya devuelto (si aplica)
+function materialNeto(m) {
+  return Number(m.monto || 0) - Number(m.montoDevuelto || 0);
+}
+
 function calcTrabajo(t, data) {
   // Los materiales que pagó directamente el cliente no cuentan como gasto nuestro
   const materialesPropios = data.materiales.filter((m) => m.trabajoId === t.id && m.pagadoPor !== "cliente");
   const materialesCliente = data.materiales.filter((m) => m.trabajoId === t.id && m.pagadoPor === "cliente");
-  const materiales = materialesPropios.reduce((s, m) => s + Number(m.monto), 0);
-  const materialesAportadosPorCliente = materialesCliente.reduce((s, m) => s + Number(m.monto), 0);
+  const materiales = materialesPropios.reduce((s, m) => s + materialNeto(m), 0);
+  const materialesAportadosPorCliente = materialesCliente.reduce((s, m) => s + materialNeto(m), 0);
   const nominaItems = data.nomina.filter((n) => n.trabajoId === t.id);
   const manoDeObra = nominaItems.reduce((s, n) => s + Number(n.monto), 0);
 
   // Desglose de gastos por quién pagó cada cosa (ej. "Boris · Materiales", "David · Materiales")
   const desgloseMap = {};
-  const acumular = (item, tipoLabel) => {
+  const acumular = (item, tipoLabel, montoOverride) => {
     const key = (item.pagadoPor || "empresa") + "|" + tipoLabel;
     if (!desgloseMap[key]) desgloseMap[key] = { nombre: pagadorNombre(data, item.pagadoPor), tipoLabel, monto: 0 };
-    desgloseMap[key].monto += Number(item.monto);
+    desgloseMap[key].monto += montoOverride !== undefined ? montoOverride : Number(item.monto);
   };
-  materialesPropios.forEach((m) => acumular(m, "Materiales"));
+  materialesPropios.forEach((m) => acumular(m, "Materiales", materialNeto(m)));
   nominaItems.forEach((n) => acumular(n, "Nómina"));
   const desglose = Object.values(desgloseMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
   // Cuánto reembolsarle a cada persona, separado por materiales y por nómina — no incluye lo que puso
   // la empresa (a la empresa no hay que reembolsarle) ni lo que puso el cliente.
   const reembolsoMap = {};
-  const acumularReembolso = (item, tipoLabel) => {
+  const acumularReembolso = (item, tipoLabel, montoOverride) => {
     const pagador = item.pagadoPor || "empresa";
     if (pagador === "empresa" || pagador === "cliente") return;
     const key = pagador + "|" + tipoLabel;
     if (!reembolsoMap[key]) reembolsoMap[key] = { nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
-    reembolsoMap[key].monto += Number(item.monto);
+    reembolsoMap[key].monto += montoOverride !== undefined ? montoOverride : Number(item.monto);
   };
-  materialesPropios.forEach((m) => acumularReembolso(m, "materiales"));
+  materialesPropios.forEach((m) => acumularReembolso(m, "materiales", materialNeto(m)));
   nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
   const reembolsoPorPersona = Object.values(reembolsoMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
@@ -383,7 +388,7 @@ function calcPendientesPorPagador(data) {
     if (!buckets[key]) buckets[key] = { key, nombre, tipo, pendiente: 0, pagado: 0, items: [] };
     return buckets[key];
   };
-  const consider = (list, tipoItem) =>
+  const consider = (list, tipoItem, montoDe) =>
     list.forEach((item) => {
       const p = item.pagadoPor;
       if (!p || p === "empresa" || p === "cliente") return;
@@ -394,14 +399,15 @@ function calcPendientesPorPagador(data) {
       } else {
         bucket = ensure(p, data.socios.find((s) => s.id === p)?.nombre || "Socio", "socio");
       }
-      if (item.reembolsado) bucket.pagado += Number(item.monto);
+      const monto = montoDe(item);
+      if (item.reembolsado) bucket.pagado += monto;
       else {
-        bucket.pendiente += Number(item.monto);
-        bucket.items.push({ ...item, tipo: tipoItem });
+        bucket.pendiente += monto;
+        bucket.items.push({ ...item, tipo: tipoItem, monto });
       }
     });
-  consider(data.materiales, "Material");
-  consider(data.nomina, "Nómina");
+  consider(data.materiales, "Material", materialNeto);
+  consider(data.nomina, "Nómina", (n) => Number(n.monto));
   return Object.values(buckets);
 }
 
@@ -409,7 +415,7 @@ function calcCuentaSaldo(cuenta, data) {
   const ingresos = data.ingresos.filter((i) => i.cuentaId === cuenta.id).reduce((s, i) => s + Number(i.monto), 0);
   const gastosMat = data.materiales
     .filter((m) => m.cuentaId === cuenta.id)
-    .reduce((s, m) => s + Number(m.monto), 0);
+    .reduce((s, m) => s + materialNeto(m), 0);
   const gastosNom = data.nomina
     .filter((n) => n.cuentaId === cuenta.id)
     .reduce((s, n) => s + Number(n.monto), 0);
@@ -1809,6 +1815,10 @@ function Materiales({ data, update, onViewPhoto }) {
   const [form, setForm] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [scan, setScan] = useState(null);
+  const [devolucionId, setDevolucionId] = useState(null);
+  const [devolucionMonto, setDevolucionMonto] = useState("");
+  const [devolucionFoto, setDevolucionFoto] = useState(null);
+  const [devolucionFotoSubiendo, setDevolucionFotoSubiendo] = useState(false);
   // scan: { status: 'loading'|'review'|'error', foto, tienda, fecha, items:[], trabajoId, pagadoPor, empleadoPagadorId, cuentaId, errorMsg }
 
   const addMaterial = () => {
@@ -2103,10 +2113,83 @@ function Materiales({ data, update, onViewPhoto }) {
                     {m.reembolsado ? " · reembolsado" : ""}
                     {m.pagadoPor === "cliente" ? " · no afecta ganancia" : ""}
                   </div>
+                  {m.montoDevuelto > 0 && (
+                    <div className="flex items-center gap-1.5 text-[11px]" style={{ color: AMBER }}>
+                      {m.fotoDevolucion && (
+                        <img
+                          src={m.fotoDevolucion}
+                          alt="Foto de devolución"
+                          className="w-6 h-6 object-cover border cursor-pointer shrink-0"
+                          style={{ borderColor: AMBER }}
+                          onClick={() => onViewPhoto?.(m.fotoDevolucion)}
+                        />
+                      )}
+                      <span>Devolviste {money(m.montoDevuelto)} de esta compra</span>
+                    </div>
+                  )}
+                  {devolucionId === m.id ? (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span className="text-[11px] text-[#7A7263]">¿Cuánto devolviste?</span>
+                      <input
+                        className="ledger-input text-xs w-24 py-1"
+                        type="number"
+                        autoFocus
+                        value={devolucionMonto}
+                        onChange={(e) => setDevolucionMonto(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            update((d) => { d.materiales.find((x) => x.id === m.id).montoDevuelto = Number(devolucionMonto) || 0; });
+                            setDevolucionId(null);
+                          }
+                        }}
+                      />
+                      <label className="text-[11px] text-[#7A7263] underline cursor-pointer flex items-center gap-0.5">
+                        <Camera size={12} /> {devolucionFotoSubiendo ? "Subiendo…" : (devolucionFoto ? "Foto agregada ✓" : "Agregar foto")}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setDevolucionFotoSubiendo(true);
+                            try {
+                              const dataUrl = await compressImage(file);
+                              setDevolucionFoto(dataUrl);
+                            } catch {}
+                            setDevolucionFotoSubiendo(false);
+                          }}
+                        />
+                      </label>
+                      <button
+                        className="text-[#3B6E52]"
+                        onClick={() => {
+                          update((d) => {
+                            const item = d.materiales.find((x) => x.id === m.id);
+                            item.montoDevuelto = Number(devolucionMonto) || 0;
+                            if (devolucionFoto) item.fotoDevolucion = devolucionFoto;
+                          });
+                          setDevolucionId(null);
+                          setDevolucionFoto(null);
+                        }}
+                      >
+                        <Check size={13} />
+                      </button>
+                      <button className="text-[#7A7263]" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); }}><X size={13} /></button>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-[11px] text-[#7A7263] underline mt-0.5"
+                      onClick={() => { setDevolucionId(m.id); setDevolucionMonto(m.montoDevuelto || ""); setDevolucionFoto(m.fotoDevolucion || null); }}
+                    >
+                      {m.montoDevuelto > 0 ? "Editar devolución" : "¿Devolviste algo?"}
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="mono">{money(m.monto)}</span>
+                <span className="mono">{money(materialNeto(m))}</span>
                 <button
                   className="text-[#A13D2E]"
                   title="Eliminar material"
@@ -2455,7 +2538,7 @@ function Reportes({ data, update }) {
                   {materialesT.length > 0 && (
                     <>
                       <div className="stamp text-[12px] text-[#7A7263] mt-3 mb-1">MATERIALES</div>
-                      {materialesT.map((m) => <Row key={m.id} label={`${m.descripcion} · ${fmtDate(m.fecha)}`} value={money(m.monto)} />)}
+                      {materialesT.map((m) => <Row key={m.id} label={`${m.descripcion} · ${fmtDate(m.fecha)}`} value={money(materialNeto(m))} />)}
                     </>
                   )}
 
@@ -2582,7 +2665,7 @@ function HojaImprimible({ titulo, subtitulo, onClose, children }) {
 
 function MaterialesTrabajoModal({ trabajo, data, onClose }) {
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id).sort((a, b) => (a.fecha < b.fecha ? -1 : 1));
-  const total = materialesT.reduce((s, m) => s + Number(m.monto), 0);
+  const total = materialesT.reduce((s, m) => s + materialNeto(m), 0);
   return (
     <HojaImprimible titulo="Materiales" subtitulo={trabajo.apodo || trabajo.nombre} onClose={onClose}>
       {materialesT.length === 0 && <div className="text-sm py-2">— sin materiales registrados —</div>}
@@ -2590,10 +2673,11 @@ function MaterialesTrabajoModal({ trabajo, data, onClose }) {
         <div key={m.id} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
           <div className="flex justify-between text-base">
             <span className="pr-2">{m.descripcion}</span>
-            <span className="whitespace-nowrap font-semibold">{money(m.monto)}</span>
+            <span className="whitespace-nowrap font-semibold">{money(materialNeto(m))}</span>
           </div>
           <div className="text-xs" style={{ color: "#888" }}>
             {fmtDate(m.fecha)} · pagado por {pagadorNombre(data, m.pagadoPor)}
+            {m.montoDevuelto > 0 ? ` · devolviste ${money(m.montoDevuelto)}` : ""}
           </div>
         </div>
       ))}
@@ -2640,7 +2724,7 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
     ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: i.concepto, monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
     ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}`, monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}`, monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
-    ...materialesC.map((m) => ({ fecha: m.fecha, tipo: "Material", detalle: m.descripcion, monto: m.monto, signo: -1, formaPago: "" })),
+    ...materialesC.map((m) => ({ fecha: m.fecha, tipo: "Material", detalle: m.descripcion, monto: materialNeto(m), signo: -1, formaPago: "" })),
     ...nominaC.map((n) => ({ fecha: n.fecha, tipo: "Nómina", detalle: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—", monto: n.monto, signo: -1, formaPago: "" })),
   ].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 
@@ -2689,10 +2773,11 @@ function ReciboModal({ trabajo, data, onClose }) {
     const p = item.pagadoPor;
     if (!p || p === "empresa" || p === "cliente" || item.reembolsado) return;
     const nombre = pagadorNombre(data, p);
+    const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
     if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0 };
-    if (tipo === "Material") reembolsosTrabajo[p].materiales += Number(item.monto);
-    else reembolsosTrabajo[p].nomina += Number(item.monto);
-    reembolsosTrabajo[p].total += Number(item.monto);
+    if (tipo === "Material") reembolsosTrabajo[p].materiales += monto;
+    else reembolsosTrabajo[p].nomina += monto;
+    reembolsosTrabajo[p].total += monto;
   };
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
@@ -2806,8 +2891,8 @@ function ReciboModal({ trabajo, data, onClose }) {
           {materialesT.length === 0 && <div className="text-sm mb-2">— sin materiales —</div>}
           {materialesT.map((m) => (
             <div key={m.id} className="flex justify-between text-base py-1">
-              <span className="pr-2">{m.descripcion}</span>
-              <span className="whitespace-nowrap font-semibold">{money(m.monto)}</span>
+              <span className="pr-2">{m.descripcion}{m.montoDevuelto > 0 ? ` (devolviste ${money(m.montoDevuelto)})` : ""}</span>
+              <span className="whitespace-nowrap font-semibold">{money(materialNeto(m))}</span>
             </div>
           ))}
           <div className="flex justify-between text-base font-bold pt-2 border-t border-black mt-1">
