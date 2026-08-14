@@ -2352,12 +2352,90 @@ function Materiales({ data, update, onViewPhoto }) {
               </div>
 
               <div className="pl-2 space-y-1 mb-2">
-                {items.map((it) => (
-                  <div key={it.id} className="flex justify-between text-[13px]">
-                    <span>{it.descripcion}</span>
-                    <span className="mono text-[#7A7263]">{money(Number(it.monto))}</span>
-                  </div>
-                ))}
+                {items.map((it) => {
+                  const noCoincide = it.trabajoId !== items[0].trabajoId;
+                  return (
+                    <div key={it.id}>
+                      <div className="flex justify-between items-center text-[13px]">
+                        <span className="flex-1">{it.descripcion}</span>
+                        <span className="mono text-[#7A7263] mr-2">{money(Number(it.monto))}</span>
+                        <button
+                          className="text-[11px] text-[#7A7263] underline mr-2 shrink-0"
+                          onClick={() => {
+                            const esEmpleado = (it.pagadoPor || "").startsWith("empleado:");
+                            setEditMaterialForm({ trabajoId: it.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (it.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? it.pagadoPor.slice("empleado:".length) : "", cuentaId: it.cuentaId || "" });
+                            setEditandoMaterialId(it.id);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="text-[#A13D2E] shrink-0"
+                          title="Eliminar este artículo"
+                          onClick={() => update((d) => { d.materiales = d.materiales.filter((x) => x.id !== it.id); })}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      {noCoincide && (
+                        <div className="flex items-center gap-1.5 text-[11px]" style={{ color: "#A13D2E" }}>
+                          <span>⚠ Este artículo está asignado a otro trabajo ({data.trabajos.find((t) => t.id === it.trabajoId)?.apodo || data.trabajos.find((t) => t.id === it.trabajoId)?.nombre || "ninguno"}) — por eso no aparece en el reporte de "{trab?.apodo || trab?.nombre}".</span>
+                          <button
+                            className="underline shrink-0"
+                            onClick={() => update((d) => { d.materiales.find((x) => x.id === it.id).trabajoId = items[0].trabajoId; })}
+                          >
+                            Corregir
+                          </button>
+                        </div>
+                      )}
+                      {editandoMaterialId === it.id && (
+                        <div className="border p-2 mt-1 mb-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                          <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
+                            <option value="">Trabajo…</option>
+                            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                          </select>
+                          <select
+                            className="ledger-input text-xs"
+                            value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
+                            onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
+                          >
+                            <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                            <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
+                            {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                            <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
+                          </select>
+                          {editMaterialForm.pagadoPor === "empleado" && (
+                            <select className="ledger-input text-xs" value={editMaterialForm.empleadoPagadorId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, empleadoPagadorId: e.target.value })}>
+                              <option value="">¿Qué trabajador?</option>
+                              {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                            </select>
+                          )}
+                          <select className="ledger-input text-xs" value={editMaterialForm.cuentaId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, cuentaId: e.target.value })}>
+                            <option value="">Cuenta bancaria…</option>
+                            {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                          </select>
+                          <div className="flex gap-2">
+                            <button
+                              className="btn-primary text-xs"
+                              onClick={() => {
+                                update((d) => {
+                                  const item = d.materiales.find((x) => x.id === it.id);
+                                  item.trabajoId = editMaterialForm.trabajoId || "";
+                                  item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
+                                  item.cuentaId = editMaterialForm.cuentaId || "";
+                                });
+                                setEditandoMaterialId(null);
+                              }}
+                            >
+                              <Check size={12} /> Guardar
+                            </button>
+                            <button className="text-xs text-[#7A7263] px-2" onClick={() => setEditandoMaterialId(null)}>Cancelar</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {totalDevuelto > 0 && (
@@ -2427,8 +2505,10 @@ function Materiales({ data, update, onViewPhoto }) {
                         usar la misma foto de la última devolución
                       </button>
                     )}
+                  </div>
+                  <div className="flex gap-2 mt-2">
                     <button
-                      className="text-[#3B6E52]"
+                      className="btn-primary"
                       onClick={() => {
                         update((d) => {
                           let primeraConFoto = false;
@@ -2450,9 +2530,9 @@ function Materiales({ data, update, onViewPhoto }) {
                         setDevolucionSeleccion({});
                       }}
                     >
-                      <Check size={13} />
+                      <Check size={14} /> Guardar devolución
                     </button>
-                    <button className="text-[#7A7263]" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); setDevolucionSeleccion({}); }}><X size={13} /></button>
+                    <button className="text-sm text-[#7A7263] px-2" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); setDevolucionSeleccion({}); }}>Cancelar</button>
                   </div>
                 </div>
               ) : (
