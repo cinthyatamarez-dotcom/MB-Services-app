@@ -1820,11 +1820,32 @@ function Materiales({ data, update, onViewPhoto }) {
   const [scan, setScan] = useState(null);
   const [devolucionId, setDevolucionId] = useState(null);
   const [devolucionMonto, setDevolucionMonto] = useState("");
+  const [devolucionSeleccion, setDevolucionSeleccion] = useState({});
   const [devolucionFoto, setDevolucionFoto] = useState(null);
+  const [ultimaFotoDevolucion, setUltimaFotoDevolucion] = useState(null);
   const [devolucionFotoSubiendo, setDevolucionFotoSubiendo] = useState(false);
   const [editandoMaterialId, setEditandoMaterialId] = useState(null);
   const [editMaterialForm, setEditMaterialForm] = useState({});
   // scan: { status: 'loading'|'review'|'error', foto, tienda, fecha, items:[], trabajoId, pagadoPor, empleadoPagadorId, cuentaId, errorMsg }
+
+  // Agrupa los materiales por facturaId (los que vinieron juntos de un escaneo) — los sueltos quedan cada uno en su propio "grupo" de 1.
+  const gruposMateriales = useMemo(() => {
+    const porFactura = {};
+    const sueltos = [];
+    data.materiales.forEach((m) => {
+      if (m.facturaId) {
+        if (!porFactura[m.facturaId]) porFactura[m.facturaId] = [];
+        porFactura[m.facturaId].push(m);
+      } else {
+        sueltos.push(m);
+      }
+    });
+    const grupos = [
+      ...Object.entries(porFactura).map(([facturaId, items]) => ({ facturaId, items, fechaOrden: items[0]?.fecha || "" })),
+      ...sueltos.map((m) => ({ facturaId: null, items: [m], fechaOrden: m.fecha })),
+    ];
+    return grupos.sort((a, b) => (a.fechaOrden < b.fechaOrden ? 1 : -1));
+  }, [data.materiales]);
 
   const addMaterial = () => {
     if (!form?.descripcion || !form?.monto) return;
@@ -2137,187 +2158,324 @@ function Materiales({ data, update, onViewPhoto }) {
 
       <div className="card p-4">
         {data.materiales.length === 0 && <Empty text="Sin materiales registrados." />}
-        {[...data.materiales].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((m) => {
-          const trab = data.trabajos.find((t) => t.id === m.trabajoId);
-          const fotosM = m.fotos?.length ? m.fotos : (m.foto ? [m.foto] : []);
-          return (
-            <div key={m.id} className="flex justify-between items-center py-1.5 text-sm border-b last:border-0" style={{ borderColor: LINE }}>
-              <div className="flex items-center gap-2">
-                {fotosM.length > 0 ? (
-                  <div className="flex -space-x-2 shrink-0">
-                    {fotosM.slice(0, 3).map((f, idx) => (
-                      <img
-                        key={idx}
-                        src={f}
-                        alt={`Factura página ${idx + 1}`}
-                        className="w-9 h-9 object-cover border cursor-pointer"
-                        style={{ borderColor: LINE }}
-                        onClick={() => onViewPhoto?.(f)}
-                      />
-                    ))}
-                    {fotosM.length > 3 && (
-                      <div className="w-9 h-9 flex items-center justify-center border bg-[#F3EEE4] text-[10px] text-[#7A7263]" style={{ borderColor: LINE }}>
-                        +{fotosM.length - 3}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}>
-                    <ImageOff size={14} />
-                  </div>
-                )}
-                <div>
-                  <div>{m.descripcion} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
-                  <div className="text-[11px] text-[#7A7263]">
-                    {fmtDate(m.fecha)} · pagado por {pagadorNombre(data, m.pagadoPor)}
-                    {m.reembolsado ? " · reembolsado" : ""}
-                    {m.pagadoPor === "cliente" ? " · no afecta ganancia" : ""}
-                  </div>
-                  {m.montoDevuelto > 0 && (
-                    <div className="flex items-center gap-1.5 text-[11px]" style={{ color: AMBER }}>
-                      {m.fotoDevolucion && (
-                        <img
-                          src={m.fotoDevolucion}
-                          alt="Foto de devolución"
-                          className="w-6 h-6 object-cover border cursor-pointer shrink-0"
-                          style={{ borderColor: AMBER }}
-                          onClick={() => onViewPhoto?.(m.fotoDevolucion)}
-                        />
+        {gruposMateriales.map((grupo) => {
+          if (!grupo.facturaId) {
+            // Material suelto (capturado a mano, sin factura de varios artículos) — se muestra igual que antes
+            const m = grupo.items[0];
+            const trab = data.trabajos.find((t) => t.id === m.trabajoId);
+            const fotosM = m.fotos?.length ? m.fotos : (m.foto ? [m.foto] : []);
+            return (
+              <div key={m.id} className="flex justify-between items-center py-1.5 text-sm border-b last:border-0" style={{ borderColor: LINE }}>
+                <div className="flex items-center gap-2">
+                  {fotosM.length > 0 ? (
+                    <div className="flex -space-x-2 shrink-0">
+                      {fotosM.slice(0, 3).map((f, idx) => (
+                        <img key={idx} src={f} alt={`Factura página ${idx + 1}`} className="w-9 h-9 object-cover border cursor-pointer" style={{ borderColor: LINE }} onClick={() => onViewPhoto?.(f)} />
+                      ))}
+                      {fotosM.length > 3 && (
+                        <div className="w-9 h-9 flex items-center justify-center border bg-[#F3EEE4] text-[10px] text-[#7A7263]" style={{ borderColor: LINE }}>+{fotosM.length - 3}</div>
                       )}
-                      <span>Devolviste {money(m.montoDevuelto)} de esta compra</span>
-                    </div>
-                  )}
-                  {devolucionId === m.id ? (
-                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="text-[11px] text-[#7A7263]">¿Cuánto devolviste?</span>
-                      <input
-                        className="ledger-input text-xs w-24 py-1"
-                        type="number"
-                        autoFocus
-                        value={devolucionMonto}
-                        onChange={(e) => setDevolucionMonto(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            update((d) => { d.materiales.find((x) => x.id === m.id).montoDevuelto = Number(devolucionMonto) || 0; });
-                            setDevolucionId(null);
-                          }
-                        }}
-                      />
-                      <label className="text-[11px] text-[#7A7263] underline cursor-pointer flex items-center gap-0.5">
-                        <Camera size={12} /> {devolucionFotoSubiendo ? "Subiendo…" : (devolucionFoto ? "Foto agregada ✓" : "Agregar foto")}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setDevolucionFotoSubiendo(true);
-                            try {
-                              const dataUrl = await compressImage(file);
-                              setDevolucionFoto(dataUrl);
-                            } catch {}
-                            setDevolucionFotoSubiendo(false);
-                          }}
-                        />
-                      </label>
-                      <button
-                        className="text-[#3B6E52]"
-                        onClick={() => {
-                          update((d) => {
-                            const item = d.materiales.find((x) => x.id === m.id);
-                            item.montoDevuelto = Number(devolucionMonto) || 0;
-                            if (devolucionFoto) item.fotoDevolucion = devolucionFoto;
-                          });
-                          setDevolucionId(null);
-                          setDevolucionFoto(null);
-                        }}
-                      >
-                        <Check size={13} />
-                      </button>
-                      <button className="text-[#7A7263]" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); }}><X size={13} /></button>
                     </div>
                   ) : (
-                    <button
-                      className="text-[11px] text-[#7A7263] underline mt-0.5"
-                      onClick={() => { setDevolucionId(m.id); setDevolucionMonto(m.montoDevuelto || ""); setDevolucionFoto(m.fotoDevolucion || null); }}
-                    >
-                      {m.montoDevuelto > 0 ? "Editar devolución" : "¿Devolviste algo?"}
-                    </button>
+                    <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}><ImageOff size={14} /></div>
                   )}
-                  {editandoMaterialId === m.id ? (
-                    <div className="border p-2 mt-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
-                      <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
-                        <option value="">Trabajo…</option>
-                        {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
-                      </select>
-                      <select
-                        className="ledger-input text-xs"
-                        value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
-                        onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
-                      >
-                        <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-                        <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
-                        {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
-                        <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
-                      </select>
-                      {editMaterialForm.pagadoPor === "empleado" && (
-                        <select className="ledger-input text-xs" value={editMaterialForm.empleadoPagadorId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, empleadoPagadorId: e.target.value })}>
-                          <option value="">¿Qué trabajador?</option>
-                          {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
-                        </select>
-                      )}
-                      <select className="ledger-input text-xs" value={editMaterialForm.cuentaId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, cuentaId: e.target.value })}>
-                        <option value="">Cuenta bancaria…</option>
-                        {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </select>
-                      <div className="flex gap-2">
+                  <div>
+                    <div>{m.descripcion} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
+                    <div className="text-[11px] text-[#7A7263]">
+                      {fmtDate(m.fecha)} · pagado por {pagadorNombre(data, m.pagadoPor)}
+                      {m.reembolsado ? " · reembolsado" : ""}
+                      {m.pagadoPor === "cliente" ? " · no afecta ganancia" : ""}
+                    </div>
+                    {m.montoDevuelto > 0 && (
+                      <div className="flex items-center gap-1.5 text-[11px]" style={{ color: AMBER }}>
+                        {m.fotoDevolucion && (
+                          <img src={m.fotoDevolucion} alt="Foto de devolución" className="w-6 h-6 object-cover border cursor-pointer shrink-0" style={{ borderColor: AMBER }} onClick={() => onViewPhoto?.(m.fotoDevolucion)} />
+                        )}
+                        <span>Devolviste {money(m.montoDevuelto)} de esta compra</span>
+                      </div>
+                    )}
+                    {devolucionId === m.id ? (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span className="text-[11px] text-[#7A7263]">¿Cuánto devolviste?</span>
+                        <input
+                          className="ledger-input text-xs w-24 py-1"
+                          type="number"
+                          autoFocus
+                          value={devolucionMonto}
+                          onChange={(e) => setDevolucionMonto(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              update((d) => { d.materiales.find((x) => x.id === m.id).montoDevuelto = Number(devolucionMonto) || 0; });
+                              setDevolucionId(null);
+                            }
+                          }}
+                        />
+                        <label className="text-[11px] text-[#7A7263] underline cursor-pointer flex items-center gap-0.5">
+                          <Camera size={12} /> {devolucionFotoSubiendo ? "Subiendo…" : (devolucionFoto ? "Foto agregada ✓" : "Agregar foto")}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setDevolucionFotoSubiendo(true);
+                              try {
+                                const dataUrl = await compressImage(file);
+                                setDevolucionFoto(dataUrl);
+                              } catch {}
+                              setDevolucionFotoSubiendo(false);
+                            }}
+                          />
+                        </label>
+                        {ultimaFotoDevolucion && ultimaFotoDevolucion !== devolucionFoto && (
+                          <button type="button" className="text-[11px] text-[#7A7263] underline" onClick={() => setDevolucionFoto(ultimaFotoDevolucion)}>
+                            usar la misma foto de la última devolución
+                          </button>
+                        )}
                         <button
-                          className="btn-primary text-xs"
+                          className="text-[#3B6E52]"
                           onClick={() => {
                             update((d) => {
                               const item = d.materiales.find((x) => x.id === m.id);
-                              item.trabajoId = editMaterialForm.trabajoId || "";
-                              item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
-                              item.cuentaId = editMaterialForm.cuentaId || "";
+                              item.montoDevuelto = Number(devolucionMonto) || 0;
+                              if (devolucionFoto) item.fotoDevolucion = devolucionFoto;
                             });
-                            setEditandoMaterialId(null);
+                            if (devolucionFoto) setUltimaFotoDevolucion(devolucionFoto);
+                            setDevolucionId(null);
+                            setDevolucionFoto(null);
                           }}
                         >
-                          <Check size={12} /> Guardar
+                          <Check size={13} />
                         </button>
-                        <button className="text-xs text-[#7A7263] px-2" onClick={() => setEditandoMaterialId(null)}>Cancelar</button>
+                        <button className="text-[#7A7263]" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); }}><X size={13} /></button>
                       </div>
-                    </div>
-                  ) : (
-                    <button
-                      className="text-[11px] text-[#7A7263] underline mt-0.5 ml-2"
-                      onClick={() => {
-                        const esEmpleado = (m.pagadoPor || "").startsWith("empleado:");
-                        setEditMaterialForm({
-                          trabajoId: m.trabajoId || "",
-                          pagadoPor: esEmpleado ? "empleado" : (m.pagadoPor || "empresa"),
-                          empleadoPagadorId: esEmpleado ? m.pagadoPor.slice("empleado:".length) : "",
-                          cuentaId: m.cuentaId || "",
-                        });
-                        setEditandoMaterialId(m.id);
-                      }}
-                    >
-                      Editar
-                    </button>
-                  )}
+                    ) : (
+                      <button className="text-[11px] text-[#7A7263] underline mt-0.5" onClick={() => { setDevolucionId(m.id); setDevolucionMonto(m.montoDevuelto || ""); setDevolucionFoto(m.fotoDevolucion || null); }}>
+                        {m.montoDevuelto > 0 ? "Editar devolución" : "¿Devolviste algo?"}
+                      </button>
+                    )}
+                    {editandoMaterialId === m.id ? (
+                      <div className="border p-2 mt-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                        <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
+                          <option value="">Trabajo…</option>
+                          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                        </select>
+                        <select
+                          className="ledger-input text-xs"
+                          value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
+                          onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
+                        >
+                          <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                          <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
+                          {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                          <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
+                        </select>
+                        {editMaterialForm.pagadoPor === "empleado" && (
+                          <select className="ledger-input text-xs" value={editMaterialForm.empleadoPagadorId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, empleadoPagadorId: e.target.value })}>
+                            <option value="">¿Qué trabajador?</option>
+                            {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                          </select>
+                        )}
+                        <select className="ledger-input text-xs" value={editMaterialForm.cuentaId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, cuentaId: e.target.value })}>
+                          <option value="">Cuenta bancaria…</option>
+                          {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                        <div className="flex gap-2">
+                          <button
+                            className="btn-primary text-xs"
+                            onClick={() => {
+                              update((d) => {
+                                const item = d.materiales.find((x) => x.id === m.id);
+                                item.trabajoId = editMaterialForm.trabajoId || "";
+                                item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
+                                item.cuentaId = editMaterialForm.cuentaId || "";
+                              });
+                              setEditandoMaterialId(null);
+                            }}
+                          >
+                            <Check size={12} /> Guardar
+                          </button>
+                          <button className="text-xs text-[#7A7263] px-2" onClick={() => setEditandoMaterialId(null)}>Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        className="text-[11px] text-[#7A7263] underline mt-0.5 ml-2"
+                        onClick={() => {
+                          const esEmpleado = (m.pagadoPor || "").startsWith("empleado:");
+                          setEditMaterialForm({ trabajoId: m.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (m.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? m.pagadoPor.slice("empleado:".length) : "", cuentaId: m.cuentaId || "" });
+                          setEditandoMaterialId(m.id);
+                        }}
+                      >
+                        Editar
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="mono">{money(materialNeto(m))}</span>
+                  <button className="text-[#A13D2E]" title="Eliminar material" onClick={() => update((d) => { d.materiales = d.materiales.filter((x) => x.id !== m.id); })}>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="mono">{money(materialNeto(m))}</span>
+            );
+          }
+
+          // Factura con varios artículos (viene de un escaneo) — se muestra agrupada con un solo resumen y una sola devolución
+          const items = grupo.items;
+          const fotosFactura = items.map((it) => it.fotos?.length ? it.fotos : []).find((f) => f?.length) || [];
+          const trab = data.trabajos.find((t) => t.id === items[0].trabajoId);
+          const subtotalOriginal = items.reduce((s, it) => s + Number(it.monto || 0), 0);
+          const totalDevuelto = items.reduce((s, it) => s + Number(it.montoDevuelto || 0), 0);
+          const totalNeto = subtotalOriginal - totalDevuelto;
+          const fotoDevolucionFactura = items.find((it) => it.fotoDevolucion)?.fotoDevolucion;
+          const editandoDevolucionFactura = devolucionId === "factura:" + grupo.facturaId;
+
+          return (
+            <div key={grupo.facturaId} className="py-2 border-b last:border-0" style={{ borderColor: LINE }}>
+              <div className="flex items-center gap-2 mb-1.5">
+                {fotosFactura.length > 0 ? (
+                  <div className="flex -space-x-2 shrink-0">
+                    {fotosFactura.slice(0, 3).map((f, idx) => (
+                      <img key={idx} src={f} alt={`Factura página ${idx + 1}`} className="w-9 h-9 object-cover border cursor-pointer" style={{ borderColor: LINE }} onClick={() => onViewPhoto?.(f)} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}><ImageOff size={14} /></div>
+                )}
+                <div className="text-[12px] text-[#7A7263]">
+                  Factura · {items.length} artículos · {fmtDate(items[0].fecha)} {trab ? `· ${trab.apodo || trab.nombre}` : ""} · pagado por {pagadorNombre(data, items[0].pagadoPor)}
+                </div>
+              </div>
+
+              <div className="pl-2 space-y-1 mb-2">
+                {items.map((it) => (
+                  <div key={it.id} className="flex justify-between text-[13px]">
+                    <span>{it.descripcion}</span>
+                    <span className="mono text-[#7A7263]">{money(Number(it.monto))}</span>
+                  </div>
+                ))}
+              </div>
+
+              {totalDevuelto > 0 && (
+                <div className="flex items-center gap-1.5 text-[11px] pl-2 mb-1" style={{ color: AMBER }}>
+                  {fotoDevolucionFactura && (
+                    <img src={fotoDevolucionFactura} alt="Foto de devolución" className="w-6 h-6 object-cover border cursor-pointer shrink-0" style={{ borderColor: AMBER }} onClick={() => onViewPhoto?.(fotoDevolucionFactura)} />
+                  )}
+                  <span>Devolviste {money(totalDevuelto)} de esta factura</span>
+                </div>
+              )}
+
+              {editandoDevolucionFactura ? (
+                <div className="pl-2 mb-1 space-y-1.5">
+                  <div className="text-[11px] text-[#7A7263]">¿Cuáles artículos devolviste? (marca los que aplique, puedes ajustar el monto si fue parcial)</div>
+                  {items.map((it) => {
+                    const marcado = devolucionSeleccion[it.id] !== undefined;
+                    return (
+                      <div key={it.id} className="flex items-center gap-2 text-[12px]">
+                        <input
+                          type="checkbox"
+                          checked={marcado}
+                          onChange={(e) => {
+                            setDevolucionSeleccion((sel) => {
+                              const nuevo = { ...sel };
+                              if (e.target.checked) nuevo[it.id] = Number(it.monto) || 0;
+                              else delete nuevo[it.id];
+                              return nuevo;
+                            });
+                          }}
+                        />
+                        <span className="flex-1">{it.descripcion}</span>
+                        {marcado ? (
+                          <input
+                            className="ledger-input text-xs w-20 py-0.5"
+                            type="number"
+                            value={devolucionSeleccion[it.id]}
+                            onChange={(e) => setDevolucionSeleccion((sel) => ({ ...sel, [it.id]: e.target.value }))}
+                          />
+                        ) : (
+                          <span className="text-[#7A7263]">{money(Number(it.monto))}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                    <label className="text-[11px] text-[#7A7263] underline cursor-pointer flex items-center gap-0.5">
+                      <Camera size={12} /> {devolucionFotoSubiendo ? "Subiendo…" : (devolucionFoto ? "Foto agregada ✓" : "Agregar foto")}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setDevolucionFotoSubiendo(true);
+                          try {
+                            const dataUrl = await compressImage(file);
+                            setDevolucionFoto(dataUrl);
+                          } catch {}
+                          setDevolucionFotoSubiendo(false);
+                        }}
+                      />
+                    </label>
+                    {ultimaFotoDevolucion && ultimaFotoDevolucion !== devolucionFoto && (
+                      <button type="button" className="text-[11px] text-[#7A7263] underline" onClick={() => setDevolucionFoto(ultimaFotoDevolucion)}>
+                        usar la misma foto de la última devolución
+                      </button>
+                    )}
+                    <button
+                      className="text-[#3B6E52]"
+                      onClick={() => {
+                        update((d) => {
+                          let primeraConFoto = false;
+                          items.forEach((it) => {
+                            const item = d.materiales.find((x) => x.id === it.id);
+                            const monto = devolucionSeleccion[it.id] !== undefined ? Number(devolucionSeleccion[it.id]) || 0 : 0;
+                            item.montoDevuelto = monto;
+                            if (devolucionFoto && !primeraConFoto && monto > 0) {
+                              item.fotoDevolucion = devolucionFoto;
+                              primeraConFoto = true;
+                            } else if (monto === 0) {
+                              item.fotoDevolucion = "";
+                            }
+                          });
+                        });
+                        if (devolucionFoto) setUltimaFotoDevolucion(devolucionFoto);
+                        setDevolucionId(null);
+                        setDevolucionFoto(null);
+                        setDevolucionSeleccion({});
+                      }}
+                    >
+                      <Check size={13} />
+                    </button>
+                    <button className="text-[#7A7263]" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); setDevolucionSeleccion({}); }}><X size={13} /></button>
+                  </div>
+                </div>
+              ) : (
                 <button
-                  className="text-[#A13D2E]"
-                  title="Eliminar material"
-                  onClick={() => update((d) => { d.materiales = d.materiales.filter((x) => x.id !== m.id); })}
+                  className="text-[11px] text-[#7A7263] underline pl-2"
+                  onClick={() => {
+                    setDevolucionId("factura:" + grupo.facturaId);
+                    setDevolucionFoto(fotoDevolucionFactura || null);
+                    const seleccionInicial = {};
+                    items.forEach((it) => { if (Number(it.montoDevuelto) > 0) seleccionInicial[it.id] = it.montoDevuelto; });
+                    setDevolucionSeleccion(seleccionInicial);
+                  }}
                 >
-                  <Trash2 size={14} />
+                  {totalDevuelto > 0 ? "Editar devolución de esta factura" : "¿Devolviste algún artículo de esta factura?"}
                 </button>
+              )}
+
+              <div className="flex justify-between items-center pl-2 mt-1.5">
+                <div className="text-[12px]">
+                  <span className="text-[#7A7263]">Subtotal factura: {money(subtotalOriginal)}</span>
+                  {totalDevuelto > 0 && <span className="text-[#7A7263]"> · Devuelto: {money(totalDevuelto)}</span>}
+                </div>
+                <span className="mono font-medium">{money(totalNeto)}</span>
               </div>
             </div>
           );
