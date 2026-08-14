@@ -1964,7 +1964,7 @@ function Materiales({ data, update, onViewPhoto }) {
         <div className="flex flex-wrap gap-2 mb-4">
           <label className="btn-primary cursor-pointer">
             <Sparkles size={15} /> Escanear factura (IA)
-            <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleEscaneo} />
+            <input type="file" accept="image/*" multiple className="hidden" onChange={handleEscaneo} />
           </label>
           <button
             className="text-sm flex items-center gap-1 px-3 border"
@@ -2128,7 +2128,7 @@ function Materiales({ data, update, onViewPhoto }) {
             <span className="text-[#4A4238]">
               {uploading ? "Procesando foto…" : (form.fotos?.length ? `${form.fotos.length} foto(s) adjuntada(s) · agregar otra` : "Adjuntar foto(s) de la factura")}
             </span>
-            <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={handleFoto} />
+            <input type="file" accept="image/*" multiple className="hidden" onChange={handleFoto} />
           </label>
           {form.fotos?.length > 0 && (
             <div className="flex flex-wrap gap-2">
