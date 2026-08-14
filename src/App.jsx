@@ -358,13 +358,18 @@ function calcTrabajo(t, data) {
   nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
   const reembolsoPorPersona = Object.values(reembolsoMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
-  const ganancia = Number(t.estimado || 0) - materiales - manoDeObra;
-  // Si ya se sabe cuánto pagó realmente el cliente (a veces es menos del estimado), la ganancia real usa ese monto
+  // El estimado se descuenta automáticamente por lo que el cliente ya compró directo (con su propio dinero).
+  // Ejemplo: estimado $12,000, el cliente compró $3,000 en materiales por su cuenta → el estimado ajustado queda en $9,000.
+  const estimadoAjustado = Number(t.estimado || 0) - materialesAportadosPorCliente;
+  const ganancia = estimadoAjustado - materiales - manoDeObra;
+  // Si ya se sabe cuánto pagó realmente el cliente, ese número YA viene neto (sin los materiales que compró él mismo),
+  // así que no se le vuelve a restar materialesAportadosPorCliente — se usa tal cual.
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
   const gananciaReal = tienePagoReal ? Number(t.estimadoPagado || 0) - materiales - manoDeObra : ganancia;
   return {
     materiales,
     materialesAportadosPorCliente,
+    estimadoAjustado,
     manoDeObra,
     desglose,
     reembolsoPorPersona,
@@ -756,7 +761,10 @@ function Trabajos({ data, update }) {
                   )}
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
                   {c.materialesAportadosPorCliente > 0 && (
-                    <Row label="Materiales que puso el cliente (no afecta)" value={money(c.materialesAportadosPorCliente)} />
+                    <>
+                      <Row label="Materiales que compró el cliente directo" value={money(c.materialesAportadosPorCliente)} />
+                      <Row label="Estimado ajustado (estimado − esos materiales)" value={money(c.estimadoAjustado)} />
+                    </>
                   )}
                   {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
@@ -1814,6 +1822,8 @@ function Materiales({ data, update, onViewPhoto }) {
   const [devolucionMonto, setDevolucionMonto] = useState("");
   const [devolucionFoto, setDevolucionFoto] = useState(null);
   const [devolucionFotoSubiendo, setDevolucionFotoSubiendo] = useState(false);
+  const [editandoMaterialId, setEditandoMaterialId] = useState(null);
+  const [editMaterialForm, setEditMaterialForm] = useState({});
   // scan: { status: 'loading'|'review'|'error', foto, tienda, fecha, items:[], trabajoId, pagadoPor, empleadoPagadorId, cuentaId, errorMsg }
 
   const addMaterial = () => {
@@ -2236,6 +2246,67 @@ function Materiales({ data, update, onViewPhoto }) {
                       {m.montoDevuelto > 0 ? "Editar devolución" : "¿Devolviste algo?"}
                     </button>
                   )}
+                  {editandoMaterialId === m.id ? (
+                    <div className="border p-2 mt-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
+                      <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
+                        <option value="">Trabajo…</option>
+                        {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                      </select>
+                      <select
+                        className="ledger-input text-xs"
+                        value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
+                        onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
+                      >
+                        <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                        <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
+                        {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                        <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
+                      </select>
+                      {editMaterialForm.pagadoPor === "empleado" && (
+                        <select className="ledger-input text-xs" value={editMaterialForm.empleadoPagadorId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, empleadoPagadorId: e.target.value })}>
+                          <option value="">¿Qué trabajador?</option>
+                          {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                        </select>
+                      )}
+                      <select className="ledger-input text-xs" value={editMaterialForm.cuentaId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, cuentaId: e.target.value })}>
+                        <option value="">Cuenta bancaria…</option>
+                        {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <button
+                          className="btn-primary text-xs"
+                          onClick={() => {
+                            update((d) => {
+                              const item = d.materiales.find((x) => x.id === m.id);
+                              item.trabajoId = editMaterialForm.trabajoId || "";
+                              item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
+                              item.cuentaId = editMaterialForm.cuentaId || "";
+                            });
+                            setEditandoMaterialId(null);
+                          }}
+                        >
+                          <Check size={12} /> Guardar
+                        </button>
+                        <button className="text-xs text-[#7A7263] px-2" onClick={() => setEditandoMaterialId(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="text-[11px] text-[#7A7263] underline mt-0.5 ml-2"
+                      onClick={() => {
+                        const esEmpleado = (m.pagadoPor || "").startsWith("empleado:");
+                        setEditMaterialForm({
+                          trabajoId: m.trabajoId || "",
+                          pagadoPor: esEmpleado ? "empleado" : (m.pagadoPor || "empresa"),
+                          empleadoPagadorId: esEmpleado ? m.pagadoPor.slice("empleado:".length) : "",
+                          cuentaId: m.cuentaId || "",
+                        });
+                        setEditandoMaterialId(m.id);
+                      }}
+                    >
+                      Editar
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -2565,6 +2636,12 @@ function Reportes({ data, update }) {
                   <Row label="Estimado" value={money(Number(t.estimado))} />
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
+                  {c.materialesAportadosPorCliente > 0 && (
+                    <>
+                      <Row label="Materiales que compró el cliente directo" value={money(c.materialesAportadosPorCliente)} />
+                      <Row label="Estimado ajustado (estimado − esos materiales)" value={money(c.estimadoAjustado)} />
+                    </>
+                  )}
                   {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
                       {c.reembolsoPorPersona.map((r, i) => (
