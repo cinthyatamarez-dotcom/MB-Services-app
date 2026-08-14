@@ -3,8 +3,25 @@ import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
   ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash
 } from "lucide-react";
-import { db } from "./firebase";
+import { db, storage } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { ref, uploadString, getDownloadURL } from "firebase/storage";
+
+// Sube una foto (en formato dataURL, como la que da compressImage) a Firebase Storage
+// y devuelve el link público cortito — así el documento principal de la app nunca se llena,
+// sin importar cuántas fotos se suban. Si algo falla, devuelve la foto tal cual (dataURL)
+// como respaldo, para no perder el trabajo del usuario.
+async function subirFoto(dataUrl) {
+  try {
+    const nombre = `fotos/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+    const fotoRef = ref(storage, nombre);
+    await uploadString(fotoRef, dataUrl, "data_url");
+    return await getDownloadURL(fotoRef);
+  } catch (e) {
+    console.error("No se pudo subir la foto a Storage, se guarda localmente como respaldo", e);
+    return dataUrl;
+  }
+}
 
 const DOC_REF_PATH = ["app", "data"];
 
@@ -20,7 +37,7 @@ const fmtDate = (iso) => {
 };
 
 // Comprime la foto de la factura antes de guardarla (para que quepa en el almacenamiento)
-function compressImage(file, maxWidth = 1000, quality = 0.6) {
+function compressImage(file, maxWidth = 700, quality = 0.45) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -1874,7 +1891,7 @@ function Materiales({ data, update, onViewPhoto }) {
       const nuevasFotos = [];
       for (const file of files) {
         const dataUrl = await compressImage(file);
-        nuevasFotos.push(dataUrl);
+        nuevasFotos.push(await subirFoto(dataUrl));
       }
       setForm((f) => ({ ...f, fotos: [...(f.fotos || []), ...nuevasFotos] }));
     } catch {
@@ -1893,11 +1910,13 @@ function Materiales({ data, update, onViewPhoto }) {
     if (files.length === 0) return;
     setScan({ status: "loading" });
     try {
-      const fotos = [];
+      const fotosLocal = [];
       for (const file of files) {
-        fotos.push(await compressImage(file, 1400, 0.72));
+        fotosLocal.push(await compressImage(file, 1200, 0.6));
       }
-      const parsed = await extraerFacturaConIA(fotos);
+      const parsed = await extraerFacturaConIA(fotosLocal);
+      // Subimos las fotos a Storage después de mandarlas a la IA (la IA necesita la imagen real, no un link)
+      const fotos = await Promise.all(fotosLocal.map((f) => subirFoto(f)));
       setScan({
         status: "review",
         fotos,
@@ -2223,7 +2242,7 @@ function Materiales({ data, update, onViewPhoto }) {
                               setDevolucionFotoSubiendo(true);
                               try {
                                 const dataUrl = await compressImage(file);
-                                setDevolucionFoto(dataUrl);
+                                setDevolucionFoto(await subirFoto(dataUrl));
                               } catch {}
                               setDevolucionFotoSubiendo(false);
                             }}
@@ -2494,7 +2513,7 @@ function Materiales({ data, update, onViewPhoto }) {
                           setDevolucionFotoSubiendo(true);
                           try {
                             const dataUrl = await compressImage(file);
-                            setDevolucionFoto(dataUrl);
+                            setDevolucionFoto(await subirFoto(dataUrl));
                           } catch {}
                           setDevolucionFotoSubiendo(false);
                         }}
