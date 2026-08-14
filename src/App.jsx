@@ -1893,11 +1893,16 @@ function Materiales({ data, update, onViewPhoto }) {
   const guardarEscaneo = () => {
     if (!scan || scan.items.length === 0) return;
     const pagadoPorFinal = scan.pagadoPor === "empleado" ? `empleado:${scan.empleadoPagadorId}` : scan.pagadoPor;
+    // Todos los artículos de esta factura comparten el mismo facturaId, y la(s) foto(s) se guardan
+    // UNA sola vez (en el primer artículo) — así evitamos duplicar las fotos en cada renglón,
+    // lo cual hacía que el archivo pesara demasiado y el guardado fallara en facturas con muchos artículos.
+    const facturaId = uid();
     update((d) => {
-      scan.items.forEach((it) => {
+      scan.items.forEach((it, idx) => {
         const etiqueta = it.numeroProducto ? `${it.descripcion} (#${it.numeroProducto})` : it.descripcion;
         d.materiales.push({
           id: uid(),
+          facturaId,
           trabajoId: scan.trabajoId || "",
           descripcion: it.cantidad && it.cantidad !== 1 ? `${etiqueta} x${it.cantidad}` : etiqueta,
           monto: Number(it.importe) || 0,
@@ -1905,7 +1910,7 @@ function Materiales({ data, update, onViewPhoto }) {
           pagadoPor: pagadoPorFinal,
           cuentaId: scan.cuentaId || "",
           reembolsado: false,
-          fotos: scan.fotos || [],
+          fotos: idx === 0 ? (scan.fotos || []) : [],
           numeroProducto: it.numeroProducto || "",
           cantidad: it.cantidad || 1,
         });
