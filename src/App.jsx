@@ -2987,10 +2987,10 @@ function Reportes({ data, update }) {
                   </div>
 
                   {materialesT.length > 0 && (
-                    <>
-                      <div className="stamp text-[12px] text-[#7A7263] mt-3 mb-1">MATERIALES</div>
-                      {materialesT.map((m) => <Row key={m.id} label={`${m.descripcion} · ${fmtDate(m.fecha)}`} value={money(materialNeto(m))} />)}
-                    </>
+                    <div className="flex justify-between text-sm font-semibold mt-3 mb-1 pt-1" style={{ borderTop: `1px dashed ${LINE}` }}>
+                      <span className="text-[#7A7263]">Materiales</span>
+                      <span>{money(c.materiales)}</span>
+                    </div>
                   )}
 
                   {nominaT.length > 0 && (
@@ -3234,9 +3234,11 @@ function ReciboModal({ trabajo, data, onClose }) {
   nominaT.forEach((n) => acumular(n, "Nómina"));
   const listaReembolsos = Object.values(reembolsosTrabajo);
 
-  // Primero se reembolsa a quien puso dinero de su bolsa, y lo que resta se divide 50/50 entre los socios
+  // Primero se reembolsa a quien puso dinero de su bolsa, y lo que resta se divide 50/50 entre los socios.
+  // Si ya se confirmó cuánto pagó realmente el cliente (estimadoPagado), se usa ese número en vez del estimado completo.
+  const gananciaParaReparto = c.tienePagoReal ? c.gananciaReal : c.ganancia;
   const totalReembolsosTrabajo = listaReembolsos.reduce((s, r) => s + r.total, 0);
-  const restoARepartir = c.ganancia - totalReembolsosTrabajo;
+  const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
   const mitadResto = restoARepartir / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
 
@@ -3364,11 +3366,19 @@ function ReciboModal({ trabajo, data, onClose }) {
             <span>ESTIMADO</span>
             <span>{money(Number(trabajo.estimado))}</span>
           </div>
-          <div className="flex justify-between text-2xl font-bold py-2" style={{ color: c.ganancia >= 0 ? "#1E6B3E" : "#A13D2E" }}>
-            <span>GANANCIA BRUTA</span>
-            <span>{money(c.ganancia)}</span>
+          {c.tienePagoReal && (
+            <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
+              <span>ESTIMADO PAGADO (lo que sí pagó el cliente)</span>
+              <span>{money(Number(trabajo.estimadoPagado))}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-2xl font-bold py-2" style={{ color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+            <span>GANANCIA {c.tienePagoReal ? "REAL" : "BRUTA"}</span>
+            <span>{money(gananciaParaReparto)}</span>
           </div>
-          <div className="text-[11px] mb-1" style={{ color: "#888" }}>Antes de restar los reembolsos pendientes — el reparto real está abajo.</div>
+          <div className="text-[11px] mb-1" style={{ color: "#888" }}>
+            {c.tienePagoReal ? "Ya considera lo que realmente pagó el cliente. " : ""}Antes de restar los reembolsos pendientes — el reparto real está abajo.
+          </div>
 
           <div className="recibo-linea" />
 
