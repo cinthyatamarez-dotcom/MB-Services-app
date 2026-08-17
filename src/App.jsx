@@ -368,12 +368,15 @@ function calcTrabajo(t, data) {
     const pagador = item.pagadoPor || "empresa";
     if (pagador === "empresa" || pagador === "cliente") return;
     const key = pagador + "|" + tipoLabel;
-    if (!reembolsoMap[key]) reembolsoMap[key] = { nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
+    if (!reembolsoMap[key]) reembolsoMap[key] = { pagadorId: pagador, nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
     reembolsoMap[key].monto += montoOverride !== undefined ? montoOverride : Number(item.monto);
   };
   materialesPropios.forEach((m) => acumularReembolso(m, "materiales", materialNeto(m)));
   nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
   const reembolsoPorPersona = Object.values(reembolsoMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
+  const totalReembolsosTrabajo = reembolsoPorPersona.reduce((s, r) => s + r.monto, 0);
+  // Cuánto se le debe reembolsar a un socio específico en este trabajo (suma materiales + nómina)
+  const reembolsoDeSocio = (socioId) => reembolsoPorPersona.filter((r) => r.pagadorId === socioId).reduce((s, r) => s + r.monto, 0);
 
   // El estimado se descuenta automáticamente por lo que el cliente ya compró directo (con su propio dinero).
   // Ejemplo: estimado $12,000, el cliente compró $3,000 en materiales por su cuenta → el estimado ajustado queda en $9,000.
@@ -383,6 +386,11 @@ function calcTrabajo(t, data) {
   // así que no se le vuelve a restar materialesAportadosPorCliente — se usa tal cual.
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
   const gananciaReal = tienePagoReal ? Number(t.estimadoPagado || 0) - materiales - manoDeObra : ganancia;
+  // Ganancia final que de verdad se reparte entre los socios: usa el pago real si ya se confirmó,
+  // y siempre resta lo que se le debe reembolsar a quien puso dinero de su bolsa en este trabajo.
+  const gananciaParaReparto = tienePagoReal ? gananciaReal : ganancia;
+  const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
+  const mitadResto = restoARepartir / 2;
   return {
     materiales,
     materialesAportadosPorCliente,
@@ -390,11 +398,16 @@ function calcTrabajo(t, data) {
     manoDeObra,
     desglose,
     reembolsoPorPersona,
+    totalReembolsosTrabajo,
+    reembolsoDeSocio,
     ganancia,
     porSocio: ganancia / 2,
     tienePagoReal,
     gananciaReal,
     porSocioReal: gananciaReal / 2,
+    gananciaParaReparto,
+    restoARepartir,
+    mitadResto,
   };
 }
 
@@ -813,10 +826,25 @@ function Trabajos({ data, update }) {
                     {data.socios.map((s) => (
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
-                        <div className="mono text-sm font-semibold">{money(c.tienePagoReal ? c.porSocioReal : c.porSocio)}</div>
+                        <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
+                        <div className="text-[9px] text-[#7A7263]">ganancia (ya restado reembolso)</div>
                       </div>
                     ))}
                   </div>
+                  {c.totalReembolsosTrabajo > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-1.5">
+                      {data.socios.map((s) => {
+                        const reemb = c.reembolsoDeSocio(s.id);
+                        if (reemb <= 0) return <div key={s.id} />;
+                        return (
+                          <div key={s.id} className="p-2 text-center" style={{ background: "#FBF3E3", border: "1px solid #E8D9A8" }}>
+                            <div className="text-[10px] uppercase" style={{ color: "#8A6416" }}>+ reembolso a {s.nombre}</div>
+                            <div className="mono text-sm font-semibold" style={{ color: "#8A6416" }}>{money(reemb)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   <label className="text-[11px] text-[#7A7263] block mb-0.5 mt-3">Trabajo a realizar en ese lugar</label>
                   <div className="mb-3">
@@ -2976,16 +3004,30 @@ function Reportes({ data, update }) {
                       ))}
                     </div>
                   )}
-                  <Row label="Ganancia total" value={money(c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
+                  <Row label={c.tienePagoReal ? "Ganancia real (según lo pagado)" : "Ganancia total"} value={money(c.tienePagoReal ? c.gananciaReal : c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
                   <div className="grid grid-cols-2 gap-2 my-2">
                     {data.socios.map((s) => (
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
-                        <div className="mono text-sm font-semibold">{money(c.porSocio)}</div>
+                        <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
+                        <div className="text-[9px] text-[#7A7263]">ganancia (ya restado reembolso)</div>
                       </div>
                     ))}
                   </div>
-
+                  {c.totalReembolsosTrabajo > 0 && (
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      {data.socios.map((s) => {
+                        const reemb = c.reembolsoDeSocio(s.id);
+                        if (reemb <= 0) return <div key={s.id} />;
+                        return (
+                          <div key={s.id} className="p-2 text-center" style={{ background: "#FBF3E3", border: "1px solid #E8D9A8" }}>
+                            <div className="text-[10px] uppercase" style={{ color: "#8A6416" }}>+ reembolso a {s.nombre}</div>
+                            <div className="mono text-sm font-semibold" style={{ color: "#8A6416" }}>{money(reemb)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   {materialesT.length > 0 && (
                     <div className="flex justify-between text-sm font-semibold mt-3 mb-1 pt-1" style={{ borderTop: `1px dashed ${LINE}` }}>
                       <span className="text-[#7A7263]">Materiales</span>
