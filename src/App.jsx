@@ -3269,15 +3269,7 @@ function ReciboModal({ trabajo, data, onClose }) {
 
           <div className="recibo-linea" />
 
-          <div className="text-sm font-bold uppercase mb-2">Materiales</div>
-          {materialesT.length === 0 && <div className="text-sm mb-2">— sin materiales —</div>}
-          {materialesT.map((m) => (
-            <div key={m.id} className="flex justify-between text-base py-1">
-              <span className="pr-2">{m.descripcion}{m.montoDevuelto > 0 ? ` (devolviste ${money(m.montoDevuelto)})` : ""}</span>
-              <span className="whitespace-nowrap font-semibold">{money(materialNeto(m))}</span>
-            </div>
-          ))}
-          <div className="flex justify-between text-base font-bold pt-2 border-t border-black mt-1">
+          <div className="flex justify-between text-base font-bold py-1">
             <span>SUBTOTAL MATERIALES</span>
             <span>{money(c.materiales)}</span>
           </div>
