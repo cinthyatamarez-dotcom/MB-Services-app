@@ -434,7 +434,7 @@ function calcCuentaSaldo(cuenta, data) {
     .filter((m) => m.cuentaId === cuenta.id)
     .reduce((s, m) => s + materialNeto(m), 0);
   const gastosNom = data.nomina
-    .filter((n) => n.cuentaId === cuenta.id)
+    .filter((n) => n.cuentaId === cuenta.id && n.estado !== "pendiente")
     .reduce((s, n) => s + Number(n.monto), 0);
   const transferIn = data.transferencias.filter((t) => t.aCuentaId === cuenta.id).reduce((s, t) => s + Number(t.monto), 0);
   const transferOut = data.transferencias.filter((t) => t.deCuentaId === cuenta.id).reduce((s, t) => s + Number(t.monto), 0);
@@ -1629,6 +1629,7 @@ function Nomina({ data, update }) {
         monto: Number(payForm.monto),
         pagadoPor: payForm.pagadoPor || "empresa",
         cuentaId: payForm.cuentaId || "",
+        estado: payForm.estado || "pagado",
         reembolsado: false,
       })
     );
@@ -1727,6 +1728,33 @@ function Nomina({ data, update }) {
               )}
               <input className="ledger-input" type="number" placeholder="Monto" value={payForm.monto || ""} onChange={(e) => setPayForm({ ...payForm, monto: e.target.value })} />
               <input className="ledger-input" type="date" value={payForm.fecha} onChange={(e) => onFechaPago(e.target.value)} />
+              <div className="stamp text-[11px] text-[#7A7263] mt-1">ESTADO DEL PAGO</div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPayForm({ ...payForm, estado: "pendiente" })}
+                  className="flex-1 text-xs py-1.5 border font-medium"
+                  style={{
+                    borderColor: (payForm.estado || "pagado") === "pendiente" ? "#A13D2E" : LINE,
+                    background: (payForm.estado || "pagado") === "pendiente" ? "#F7DEDA" : "#fff",
+                    color: (payForm.estado || "pagado") === "pendiente" ? "#A13D2E" : "#7A7263",
+                  }}
+                >
+                  Pendiente — se debe, no se ha pagado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayForm({ ...payForm, estado: "pagado" })}
+                  className="flex-1 text-xs py-1.5 border font-medium"
+                  style={{
+                    borderColor: (payForm.estado || "pagado") === "pagado" ? GREEN : LINE,
+                    background: (payForm.estado || "pagado") === "pagado" ? "#DDEEDF" : "#fff",
+                    color: (payForm.estado || "pagado") === "pagado" ? GREEN : "#7A7263",
+                  }}
+                >
+                  Ya pagado
+                </button>
+              </div>
               <select className="ledger-input" value={payForm.pagadoPor || "empresa"} onChange={(e) => setPayForm({ ...payForm, pagadoPor: e.target.value })}>
                 <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                 {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar){data.rotacionNomina?.activa && s.id === socioEnTurno(data, payForm.fecha) ? " · turno del mes" : ""}</option>)}
@@ -1765,6 +1793,32 @@ function Nomina({ data, update }) {
                   </select>
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={editForm.monto || ""} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
                   <input className="ledger-input text-xs" type="date" value={editForm.fecha || ""} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, estado: "pendiente" })}
+                      className="flex-1 text-xs py-1.5 border font-medium"
+                      style={{
+                        borderColor: (editForm.estado || "pagado") === "pendiente" ? "#A13D2E" : LINE,
+                        background: (editForm.estado || "pagado") === "pendiente" ? "#F7DEDA" : "#fff",
+                        color: (editForm.estado || "pagado") === "pendiente" ? "#A13D2E" : "#7A7263",
+                      }}
+                    >
+                      Pendiente
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, estado: "pagado" })}
+                      className="flex-1 text-xs py-1.5 border font-medium"
+                      style={{
+                        borderColor: (editForm.estado || "pagado") === "pagado" ? GREEN : LINE,
+                        background: (editForm.estado || "pagado") === "pagado" ? "#DDEEDF" : "#fff",
+                        color: (editForm.estado || "pagado") === "pagado" ? GREEN : "#7A7263",
+                      }}
+                    >
+                      Pagado
+                    </button>
+                  </div>
                   <select className="ledger-input text-xs" value={editForm.pagadoPor || "empresa"} onChange={(e) => setEditForm({ ...editForm, pagadoPor: e.target.value })}>
                     <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                     {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
@@ -1785,6 +1839,7 @@ function Nomina({ data, update }) {
                           pago.fecha = editForm.fecha;
                           pago.pagadoPor = editForm.pagadoPor || "empresa";
                           pago.cuentaId = editForm.cuentaId || "";
+                          pago.estado = editForm.estado || "pagado";
                         });
                         setEditandoPagoId(null);
                       }}
@@ -1799,6 +1854,20 @@ function Nomina({ data, update }) {
                   <div>
                     <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
                     <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.reembolsado ? " · reembolsado" : ""}</div>
+                    <button
+                      className="text-[11px] font-medium px-2 py-0.5 border mt-1"
+                      style={{
+                        borderColor: n.estado === "pendiente" ? "#A13D2E" : GREEN,
+                        background: n.estado === "pendiente" ? "#F7DEDA" : "#DDEEDF",
+                        color: n.estado === "pendiente" ? "#A13D2E" : GREEN,
+                      }}
+                      onClick={() => update((d) => {
+                        const pago = d.nomina.find((x) => x.id === n.id);
+                        pago.estado = pago.estado === "pendiente" ? "pagado" : "pendiente";
+                      })}
+                    >
+                      {n.estado === "pendiente" ? "Pendiente" : "Pagado"} · tocar para cambiar
+                    </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="mono">{money(n.monto)}</span>
@@ -1806,7 +1875,7 @@ function Nomina({ data, update }) {
                       className="text-[#7A7263]"
                       title="Editar pago"
                       onClick={() => {
-                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "" });
+                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "", estado: n.estado || "pagado" });
                         setEditandoPagoId(n.id);
                       }}
                     >
@@ -3296,9 +3365,10 @@ function ReciboModal({ trabajo, data, onClose }) {
             <span>{money(Number(trabajo.estimado))}</span>
           </div>
           <div className="flex justify-between text-2xl font-bold py-2" style={{ color: c.ganancia >= 0 ? "#1E6B3E" : "#A13D2E" }}>
-            <span>GANANCIA</span>
+            <span>GANANCIA BRUTA</span>
             <span>{money(c.ganancia)}</span>
           </div>
+          <div className="text-[11px] mb-1" style={{ color: "#888" }}>Antes de restar los reembolsos pendientes — el reparto real está abajo.</div>
 
           <div className="recibo-linea" />
 
@@ -3322,21 +3392,30 @@ function ReciboModal({ trabajo, data, onClose }) {
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            {data.socios.map((s) => {
-              const reembolsoPropio = reembolsoDeSocio(s.id);
-              return (
-                <div key={s.id} className="text-center py-2 px-1" style={{ background: "#F5F3EE" }}>
-                  <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
-                  <div className="text-xl font-bold mt-0.5">{money(mitadResto + reembolsoPropio)}</div>
-                  {reembolsoPropio > 0 && (
-                    <div className="text-[10px] mt-1 leading-tight" style={{ color: "#888" }}>
-                      {money(mitadResto)} + {money(reembolsoPropio)} reemb.
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {data.socios.map((s) => (
+              <div key={s.id} className="text-center py-2 px-1" style={{ background: "#F5F3EE" }}>
+                <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
+                <div className="text-xl font-bold mt-0.5">{money(mitadResto)}</div>
+                <div className="text-[10px] mt-0.5" style={{ color: "#888" }}>ganancia de este trabajo</div>
+              </div>
+            ))}
           </div>
+
+          {data.socios.some((s) => reembolsoDeSocio(s.id) > 0) && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {data.socios.map((s) => {
+                const reembolsoPropio = reembolsoDeSocio(s.id);
+                if (reembolsoPropio <= 0) return <div key={s.id} />;
+                return (
+                  <div key={s.id} className="text-center py-2 px-1" style={{ background: "#FBF3E3", border: "1px solid #E8D9A8" }}>
+                    <div className="text-xs uppercase tracking-wide" style={{ color: "#8A6416" }}>Reembolso a {s.nombre}</div>
+                    <div className="text-lg font-bold mt-0.5" style={{ color: "#8A6416" }}>{money(reembolsoPropio)}</div>
+                    <div className="text-[10px] mt-0.5" style={{ color: "#8A6416" }}>dinero que se le debe, aparte de su ganancia</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {listaReembolsos.length > 0 && (
             <>
