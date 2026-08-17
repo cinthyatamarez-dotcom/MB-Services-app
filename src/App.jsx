@@ -385,7 +385,10 @@ function calcTrabajo(t, data) {
   // Si ya se sabe cuánto pagó realmente el cliente, ese número YA viene neto (sin los materiales que compró él mismo),
   // así que no se le vuelve a restar materialesAportadosPorCliente — se usa tal cual.
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
-  const gananciaReal = tienePagoReal ? Number(t.estimadoPagado || 0) - materiales - manoDeObra : ganancia;
+  // Igual que con el Estimado, al "Estimado pagado" también se le resta lo que el cliente compró directo —
+  // así no tienes que hacer esa resta tú misma antes de escribirlo, escribes el número completo tal cual.
+  const estimadoPagadoAjustado = tienePagoReal ? Number(t.estimadoPagado || 0) - materialesAportadosPorCliente : null;
+  const gananciaReal = tienePagoReal ? estimadoPagadoAjustado - materiales - manoDeObra : ganancia;
   // Ganancia final que de verdad se reparte entre los socios: usa el pago real si ya se confirmó,
   // y siempre resta lo que se le debe reembolsar a quien puso dinero de su bolsa en este trabajo.
   const gananciaParaReparto = tienePagoReal ? gananciaReal : ganancia;
@@ -404,6 +407,7 @@ function calcTrabajo(t, data) {
     porSocio: ganancia / 2,
     tienePagoReal,
     gananciaReal,
+    estimadoPagadoAjustado,
     porSocioReal: gananciaReal / 2,
     gananciaParaReparto,
     restoARepartir,
@@ -728,7 +732,19 @@ function Trabajos({ data, update }) {
             if (orden === "abecedario") {
               return (a.apodo || a.nombre || "").localeCompare(b.apodo || b.nombre || "", "es", { sensitivity: "base" });
             }
-            return 0; // orden por número = mantiene el orden en que se agregaron
+            // Orden por número: compara como números si ambos tienen número de trabajo (así 2 va antes que 10).
+            // Los que no tienen número asignado se quedan al final, en el orden en que se agregaron.
+            const na = a.numeroTrabajo?.trim();
+            const nb = b.numeroTrabajo?.trim();
+            if (na && nb) {
+              const numA = parseFloat(na.replace(/[^\d.]/g, ""));
+              const numB = parseFloat(nb.replace(/[^\d.]/g, ""));
+              if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+              return na.localeCompare(nb, "es", { numeric: true, sensitivity: "base" });
+            }
+            if (na && !nb) return -1;
+            if (!na && nb) return 1;
+            return 0;
           })
           .map((t, idx) => {
           const c = calcTrabajo(t, data);
@@ -809,7 +825,7 @@ function Trabajos({ data, update }) {
                   <Row label="Ganancia según estimado" value={money(c.ganancia)} bold={!c.tienePagoReal} accent={c.ganancia >= 0 ? GREEN : RED} />
 
                   <div className="mt-2 mb-1">
-                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Estimado pagado (si pagaron menos del estimado, pon aquí lo que sí pagaron)</label>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Total final que pagó el cliente (el número completo, sin restar nada — la app resta sola los materiales que compró el cliente)</label>
                     <input
                       className="ledger-input text-xs"
                       type="number"
@@ -818,6 +834,9 @@ function Trabajos({ data, update }) {
                       onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimadoPagado = e.target.value; })}
                     />
                   </div>
+                  {c.tienePagoReal && c.materialesAportadosPorCliente > 0 && (
+                    <Row label="Total final ajustado (menos esos materiales)" value={money(c.estimadoPagadoAjustado)} />
+                  )}
                   {c.tienePagoReal && (
                     <Row label="Ganancia real (según lo pagado)" value={money(c.gananciaReal)} bold accent={c.gananciaReal >= 0 ? GREEN : RED} />
                   )}
@@ -1678,6 +1697,36 @@ function Nomina({ data, update }) {
   return (
     <div>
       <SectionTitle sub="Empleados de planta y por día, y los pagos que se les hacen">Nómina</SectionTitle>
+
+      {(() => {
+        const pendientesPorEmpleado = {};
+        data.nomina.filter((n) => n.estado === "pendiente").forEach((n) => {
+          if (!pendientesPorEmpleado[n.empleadoId]) pendientesPorEmpleado[n.empleadoId] = { monto: 0, cantidad: 0 };
+          pendientesPorEmpleado[n.empleadoId].monto += Number(n.monto);
+          pendientesPorEmpleado[n.empleadoId].cantidad += 1;
+        });
+        const lista = Object.entries(pendientesPorEmpleado)
+          .map(([empId, info]) => ({ nombre: data.empleados.find((e) => e.id === empId)?.nombre || "—", ...info }))
+          .sort((a, b) => b.monto - a.monto);
+        const totalPendiente = lista.reduce((s, l) => s + l.monto, 0);
+        if (lista.length === 0) return null;
+        return (
+          <div className="card p-4 mb-4" style={{ borderLeft: "4px solid #A13D2E" }}>
+            <div className="flex justify-between items-baseline mb-2">
+              <div className="stamp text-[13px] text-[#A13D2E]">PENDIENTE DE PAGO</div>
+              <div className="mono text-lg font-bold" style={{ color: "#A13D2E" }}>{money(totalPendiente)}</div>
+            </div>
+            <div className="space-y-1.5">
+              {lista.map((l, i) => (
+                <div key={i} className="flex justify-between text-sm">
+                  <span>{l.nombre} <span className="text-[11px] text-[#7A7263]">({l.cantidad} pago{l.cantidad !== 1 ? "s" : ""})</span></span>
+                  <span className="mono">{money(l.monto)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {data.rotacionNomina?.activa && (
         <div className="card p-3 mb-4 flex items-center justify-between" style={{ borderLeft: `4px solid ${AMBER}` }}>
@@ -3409,10 +3458,18 @@ function ReciboModal({ trabajo, data, onClose }) {
             <span>{money(Number(trabajo.estimado))}</span>
           </div>
           {c.tienePagoReal && (
-            <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
-              <span>ESTIMADO PAGADO (lo que sí pagó el cliente)</span>
-              <span>{money(Number(trabajo.estimadoPagado))}</span>
-            </div>
+            <>
+              <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
+                <span>TOTAL FINAL PAGADO POR EL CLIENTE</span>
+                <span>{money(Number(trabajo.estimadoPagado))}</span>
+              </div>
+              {c.materialesAportadosPorCliente > 0 && (
+                <div className="flex justify-between text-base py-0.5" style={{ color: "#888" }}>
+                  <span>Menos materiales que compró el cliente directo</span>
+                  <span>{money(c.estimadoPagadoAjustado)}</span>
+                </div>
+              )}
+            </>
           )}
           <div className="flex justify-between text-2xl font-bold py-2" style={{ color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
             <span>GANANCIA {c.tienePagoReal ? "REAL" : "BRUTA"}</span>
