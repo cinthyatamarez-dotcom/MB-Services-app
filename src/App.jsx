@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
-  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash
+  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock
 } from "lucide-react";
 import { db, storage } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -24,6 +24,12 @@ async function subirFoto(dataUrl) {
 }
 
 const DOC_REF_PATH = ["app", "data"];
+
+// Contraseña para poder EDITAR la aplicación. Sin ella, cualquiera que abra el link puede ver
+// todo pero no se guarda nada si intenta agregar, editar o borrar algo — así los socios pueden
+// consultar la información sin arriesgarse a borrar algo por accidente.
+const CLAVE_EDICION = "MBServices2026";
+const CLAVE_STORAGE_KEY = "mb-services-desbloqueado";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -186,6 +192,13 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [showSocios, setShowSocios] = useState(false);
   const [lightbox, setLightbox] = useState(null);
+  const [desbloqueado, setDesbloqueado] = useState(() => {
+    try { return localStorage.getItem(CLAVE_STORAGE_KEY) === "si"; } catch (e) { return false; }
+  });
+  const [showClave, setShowClave] = useState(false);
+  const [claveInput, setClaveInput] = useState("");
+  const [claveError, setClaveError] = useState(false);
+  const [avisoSoloLectura, setAvisoSoloLectura] = useState(false);
 
   if (!data) {
     return (
@@ -195,7 +208,29 @@ export default function App() {
     );
   }
 
+  const desbloquear = () => {
+    if (claveInput === CLAVE_EDICION) {
+      setDesbloqueado(true);
+      setShowClave(false);
+      setClaveInput("");
+      setClaveError(false);
+      try { localStorage.setItem(CLAVE_STORAGE_KEY, "si"); } catch (e) {}
+    } else {
+      setClaveError(true);
+    }
+  };
+
+  const bloquear = () => {
+    setDesbloqueado(false);
+    try { localStorage.removeItem(CLAVE_STORAGE_KEY); } catch (e) {}
+  };
+
   const update = (fn) => {
+    if (!desbloqueado) {
+      setAvisoSoloLectura(true);
+      setTimeout(() => setAvisoSoloLectura(false), 2500);
+      return;
+    }
     const next = structuredClone ? structuredClone(data) : JSON.parse(JSON.stringify(data));
     fn(next);
     persist(next);
@@ -224,6 +259,13 @@ export default function App() {
         <div className="flex items-center gap-3">
           <SaveIndicator status={status} />
           <button
+            onClick={() => (desbloqueado ? bloquear() : setShowClave(true))}
+            className="text-[#C9C1B0] hover:text-white transition-colors"
+            title={desbloqueado ? "Modo edición activo — toca para bloquear" : "Modo solo lectura — toca para desbloquear edición"}
+          >
+            {desbloqueado ? <Unlock size={18} /> : <Lock size={18} />}
+          </button>
+          <button
             onClick={() => setShowSocios(true)}
             className="text-[#C9C1B0] hover:text-white transition-colors"
             title="Configurar socios"
@@ -232,6 +274,40 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {!desbloqueado && (
+        <div className="text-center text-[11px] py-1.5" style={{ background: "#FBF3E3", color: "#8A6416" }}>
+          Modo solo lectura — toca el candado arriba para poder editar
+        </div>
+      )}
+
+      {avisoSoloLectura && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 text-sm text-white" style={{ background: "#A13D2E" }}>
+          Estás en modo solo lectura, no se guardó el cambio. Toca el candado para desbloquear.
+        </div>
+      )}
+
+      {showClave && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowClave(false)}>
+          <div className="bg-white max-w-xs w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="stamp text-[14px] mb-3">Desbloquear edición</div>
+            <input
+              type="password"
+              className="ledger-input mb-2"
+              placeholder="Contraseña"
+              value={claveInput}
+              onChange={(e) => { setClaveInput(e.target.value); setClaveError(false); }}
+              onKeyDown={(e) => e.key === "Enter" && desbloquear()}
+              autoFocus
+            />
+            {claveError && <p className="text-[12px] mb-2" style={{ color: "#A13D2E" }}>Contraseña incorrecta.</p>}
+            <div className="flex gap-2">
+              <button className="btn-primary" onClick={desbloquear}><Check size={14} /> Entrar</button>
+              <button className="text-sm text-[#7A7263] px-2" onClick={() => setShowClave(false)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs - folder style */}
       <nav className="flex overflow-x-auto no-scrollbar" style={{ background: "#E8E1D3" }}>
@@ -261,7 +337,7 @@ export default function App() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-16">
         {tab === "dashboard" && <Dashboard data={data} />}
-        {tab === "trabajos" && <Trabajos data={data} update={update} />}
+        {tab === "trabajos" && <Trabajos data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "clientes" && <Clientes data={data} update={update} />}
         {tab === "bitacora" && <Bitacora data={data} update={update} />}
         {tab === "nomina" && <Nomina data={data} update={update} />}
@@ -366,7 +442,7 @@ function calcTrabajo(t, data) {
   const reembolsoMap = {};
   const acumularReembolso = (item, tipoLabel, montoOverride) => {
     const pagador = item.pagadoPor || "empresa";
-    if (pagador === "empresa" || pagador === "cliente") return;
+    if (pagador === "empresa" || pagador === "cliente" || pagador === "sindefinir") return;
     const key = pagador + "|" + tipoLabel;
     if (!reembolsoMap[key]) reembolsoMap[key] = { pagadorId: pagador, nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
     reembolsoMap[key].monto += montoOverride !== undefined ? montoOverride : Number(item.monto);
@@ -425,7 +501,7 @@ function calcPendientesPorPagador(data) {
   const consider = (list, tipoItem, montoDe) =>
     list.forEach((item) => {
       const p = item.pagadoPor;
-      if (!p || p === "empresa" || p === "cliente") return;
+      if (!p || p === "empresa" || p === "cliente" || p === "sindefinir") return;
       let bucket;
       if (p.startsWith("empleado:")) {
         const empId = p.slice("empleado:".length);
@@ -462,6 +538,7 @@ function calcCuentaSaldo(cuenta, data) {
 function pagadorNombre(data, pagadoPor) {
   if (!pagadoPor || pagadoPor === "empresa") return data.empresaNombre || "Empresa";
   if (pagadoPor === "cliente") return "Cliente";
+  if (pagadoPor === "sindefinir") return "Aún no se sabe";
   if (pagadoPor.startsWith("empleado:")) {
     const id = pagadoPor.slice("empleado:".length);
     return data.empleados.find((e) => e.id === id)?.nombre || "Trabajador";
@@ -611,7 +688,67 @@ function Row({ label, value, bold, accent }) {
 }
 
 /* ---------------- Trabajos ---------------- */
-function Trabajos({ data, update }) {
+// Mini componente para subir/mostrar fotos de "antes" y "después" en un trabajo.
+// Comprime la foto, la sube a Storage (igual que las demás fotos de la app) y guarda solo el link.
+function FotosAntesDespues({ titulo, fotos, onAdd, onRemove, onViewPhoto }) {
+  const [subiendo, setSubiendo] = useState(false);
+  const inputId = "fotos-" + titulo;
+
+  const handleFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setSubiendo(true);
+    try {
+      for (const file of files) {
+        const dataUrl = await compressImage(file, 1000, 0.55);
+        const url = await subirFoto(dataUrl);
+        onAdd(url);
+      }
+    } finally {
+      setSubiendo(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="border p-2" style={{ borderColor: LINE }}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] uppercase text-[#7A7263]">{titulo}</span>
+        <label htmlFor={inputId} className="text-[11px] px-2 py-1 border cursor-pointer flex items-center gap-1" style={{ borderColor: AMBER, color: AMBER }}>
+          <Camera size={12} /> {subiendo ? "Subiendo..." : "Agregar"}
+        </label>
+        <input id={inputId} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} disabled={subiendo} />
+      </div>
+      {fotos.length === 0 ? (
+        <p className="text-[11px] text-[#C9C1B0]">Sin fotos todavía.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {fotos.map((f, idx) => (
+            <div key={idx} className="relative">
+              <img
+                src={f}
+                alt={`${titulo} ${idx + 1}`}
+                className="w-14 h-14 object-cover border cursor-pointer"
+                style={{ borderColor: LINE }}
+                onClick={() => onViewPhoto?.(f)}
+              />
+              <button
+                type="button"
+                onClick={() => onRemove(idx)}
+                className="absolute -top-1.5 -right-1.5 bg-white border rounded-full w-4 h-4 flex items-center justify-center"
+                style={{ borderColor: LINE }}
+              >
+                <X size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Trabajos({ data, update, onViewPhoto }) {
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [orden, setOrden] = useState("numero"); // "numero" = orden en que se agregaron, "abecedario" = A-Z
@@ -870,6 +1007,35 @@ function Trabajos({ data, update }) {
                     <NumberedListEditor
                       value={t.descripcionTrabajo || ""}
                       onChange={(val) => update((d) => { d.trabajos.find((x) => x.id === t.id).descripcionTrabajo = val; })}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <FotosAntesDespues
+                      titulo="Antes"
+                      fotos={t.fotosAntes || []}
+                      onViewPhoto={onViewPhoto}
+                      onAdd={(url) => update((d) => {
+                        const trabajo = d.trabajos.find((x) => x.id === t.id);
+                        trabajo.fotosAntes = [...(trabajo.fotosAntes || []), url];
+                      })}
+                      onRemove={(idx) => update((d) => {
+                        const trabajo = d.trabajos.find((x) => x.id === t.id);
+                        trabajo.fotosAntes = (trabajo.fotosAntes || []).filter((_, i) => i !== idx);
+                      })}
+                    />
+                    <FotosAntesDespues
+                      titulo="Después"
+                      fotos={t.fotosDespues || []}
+                      onViewPhoto={onViewPhoto}
+                      onAdd={(url) => update((d) => {
+                        const trabajo = d.trabajos.find((x) => x.id === t.id);
+                        trabajo.fotosDespues = [...(trabajo.fotosDespues || []), url];
+                      })}
+                      onRemove={(idx) => update((d) => {
+                        const trabajo = d.trabajos.find((x) => x.id === t.id);
+                        trabajo.fotosDespues = (trabajo.fotosDespues || []).filter((_, i) => i !== idx);
+                      })}
                     />
                   </div>
 
@@ -1171,6 +1337,8 @@ function Bitacora({ data, update }) {
   const [filtroTrabajo, setFiltroTrabajo] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [extraTemp, setExtraTemp] = useState("");
+  const [editandoTextoId, setEditandoTextoId] = useState(null);
+  const [textoTemp, setTextoTemp] = useState("");
   const [pagoAbiertoId, setPagoAbiertoId] = useState(null);
   const [pagoForm, setPagoForm] = useState({});
   const [pagoEditandoId, setPagoEditandoId] = useState(null);
@@ -1427,6 +1595,9 @@ function Bitacora({ data, update }) {
               {esNuevoGrupo && (
                 <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
                   <span className="stamp text-[12px] text-[#1E2A38]">{trab?.apodo || trab?.nombre || "Sin trabajo"}</span>
+                  {trab?.estado === "cerrado" && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1EEE6", color: GREEN }}>Concluido</span>
+                  )}
                   <div className="flex-1 h-px" style={{ background: AMBER }} />
                 </div>
               )}
@@ -1435,7 +1606,43 @@ function Bitacora({ data, update }) {
                 <div className="font-medium text-sm">{trab?.apodo || trab?.nombre || "—"}</div>
                 <div className="text-[11px] text-[#7A7263]">{fmtDate(b.fecha)}</div>
               </div>
-              <p className="text-sm text-[#4A4238] mb-2">{b.descripcion}</p>
+              {editandoTextoId === b.id ? (
+                <div className="mb-2">
+                  <textarea
+                    className="ledger-input text-sm w-full"
+                    rows={3}
+                    value={textoTemp}
+                    onChange={(e) => setTextoTemp(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      type="button"
+                      className="text-[11px] px-2 py-1 border flex items-center gap-1"
+                      style={{ borderColor: GREEN, color: GREEN }}
+                      onClick={() => {
+                        update((d) => { d.bitacora.find((x) => x.id === b.id).descripcion = textoTemp; });
+                        setEditandoTextoId(null);
+                      }}
+                    >
+                      <Check size={12} /> Guardar
+                    </button>
+                    <button type="button" className="text-[11px] text-[#7A7263] underline" onClick={() => setEditandoTextoId(null)}>Cancelar</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="text-sm text-[#4A4238]">{b.descripcion}</p>
+                  <button
+                    type="button"
+                    title="Editar lo que se escribió"
+                    className="text-[#7A7263] shrink-0"
+                    onClick={() => { setEditandoTextoId(b.id); setTextoTemp(b.descripcion || ""); }}
+                  >
+                    <PenLine size={13} />
+                  </button>
+                </div>
+              )}
 
               {/* Participantes con su propio estado — clic para Pendiente/Completado, X para quitar */}
               <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1542,12 +1749,15 @@ function Bitacora({ data, update }) {
                           <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoEditForm.monto || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, monto: e.target.value })} />
                           <select className="ledger-input text-xs" value={pagoEditForm.pagadoPor || "empresa"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, pagadoPor: e.target.value })}>
                             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                            <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
+                            <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
                             {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                           </select>
                           <select className="ledger-input text-xs" value={pagoEditForm.cuentaId || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, cuentaId: e.target.value })}>
                             <option value="">Cuenta bancaria…</option>
                             {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
+                          <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={pagoEditForm.numeroCheque || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, numeroCheque: e.target.value })} />
                           <div className="flex gap-2">
                             <button
                               className="btn-primary"
@@ -1558,6 +1768,7 @@ function Bitacora({ data, update }) {
                                   p.monto = Number(pagoEditForm.monto);
                                   p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
                                   p.cuentaId = pagoEditForm.cuentaId || "";
+                                  p.numeroCheque = pagoEditForm.numeroCheque || "";
                                 });
                                 setPagoEditandoId(null);
                               }}
@@ -1573,6 +1784,7 @@ function Bitacora({ data, update }) {
                       <div key={pago.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
                         <span>
                           Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
+                          {pago.numeroCheque ? ` · cheque #${pago.numeroCheque}` : ""}
                           {pago.reembolsado ? " · reembolsado" : ""}
                         </span>
                         <span className="flex items-center gap-2 shrink-0 ml-2">
@@ -1580,7 +1792,7 @@ function Bitacora({ data, update }) {
                             className="text-[#7A7263]"
                             title="Editar este pago"
                             onClick={() => {
-                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "" });
+                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "", numeroCheque: pago.numeroCheque || "" });
                               setPagoEditandoId(pago.id);
                             }}
                           >
@@ -1615,6 +1827,8 @@ function Bitacora({ data, update }) {
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoForm.monto || ""} onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })} />
                   <select className="ledger-input text-xs" value={pagoForm.pagadoPor || "empresa"} onChange={(e) => setPagoForm({ ...pagoForm, pagadoPor: e.target.value })}>
                     <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                    <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
+                    <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
                     {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                   </select>
                   <select className="ledger-input text-xs" value={pagoForm.cuentaId || ""} onChange={(e) => setPagoForm({ ...pagoForm, cuentaId: e.target.value })}>
@@ -1676,6 +1890,7 @@ function Nomina({ data, update }) {
         monto: Number(payForm.monto),
         pagadoPor: payForm.pagadoPor || "empresa",
         cuentaId: payForm.cuentaId || "",
+        numeroCheque: payForm.numeroCheque || "",
         estado: payForm.estado || "pagado",
         reembolsado: false,
       })
@@ -1834,12 +2049,15 @@ function Nomina({ data, update }) {
               </div>
               <select className="ledger-input" value={payForm.pagadoPor || "empresa"} onChange={(e) => setPayForm({ ...payForm, pagadoPor: e.target.value })}>
                 <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
+                <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
                 {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar){data.rotacionNomina?.activa && s.id === socioEnTurno(data, payForm.fecha) ? " · turno del mes" : ""}</option>)}
               </select>
               <select className="ledger-input" value={payForm.cuentaId || ""} onChange={(e) => setPayForm({ ...payForm, cuentaId: e.target.value })}>
                 <option value="">Cuenta bancaria…</option>
                 {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
+              <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={payForm.numeroCheque || ""} onChange={(e) => setPayForm({ ...payForm, numeroCheque: e.target.value })} />
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addPago}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setPayForm(null)}>Cancelar</button>
@@ -1898,12 +2116,15 @@ function Nomina({ data, update }) {
                   </div>
                   <select className="ledger-input text-xs" value={editForm.pagadoPor || "empresa"} onChange={(e) => setEditForm({ ...editForm, pagadoPor: e.target.value })}>
                     <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                    <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
+                    <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
                     {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                   </select>
                   <select className="ledger-input text-xs" value={editForm.cuentaId || ""} onChange={(e) => setEditForm({ ...editForm, cuentaId: e.target.value })}>
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
+                  <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editForm.numeroCheque || ""} onChange={(e) => setEditForm({ ...editForm, numeroCheque: e.target.value })} />
                   <div className="flex gap-2">
                     <button
                       className="btn-primary"
@@ -1916,6 +2137,7 @@ function Nomina({ data, update }) {
                           pago.fecha = editForm.fecha;
                           pago.pagadoPor = editForm.pagadoPor || "empresa";
                           pago.cuentaId = editForm.cuentaId || "";
+                          pago.numeroCheque = editForm.numeroCheque || "";
                           pago.estado = editForm.estado || "pagado";
                         });
                         setEditandoPagoId(null);
@@ -1930,7 +2152,7 @@ function Nomina({ data, update }) {
                 <div className="flex justify-between items-center text-sm">
                   <div>
                     <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
-                    <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.reembolsado ? " · reembolsado" : ""}</div>
+                    <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.numeroCheque ? ` · cheque #${n.numeroCheque}` : ""}{n.reembolsado ? " · reembolsado" : ""}</div>
                     <button
                       className="text-[11px] font-medium px-2 py-0.5 border mt-1"
                       style={{
@@ -1952,7 +2174,7 @@ function Nomina({ data, update }) {
                       className="text-[#7A7263]"
                       title="Editar pago"
                       onClick={() => {
-                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "", estado: n.estado || "pagado" });
+                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "", numeroCheque: n.numeroCheque || "", estado: n.estado || "pagado" });
                         setEditandoPagoId(n.id);
                       }}
                     >
@@ -1985,13 +2207,19 @@ function Materiales({ data, update, onViewPhoto }) {
   const [devolucionMonto, setDevolucionMonto] = useState("");
   const [devolucionSeleccion, setDevolucionSeleccion] = useState({});
   const [devolucionFoto, setDevolucionFoto] = useState(null);
+  const [devolucionImpuesto, setDevolucionImpuesto] = useState("");
   const [ultimaFotoDevolucion, setUltimaFotoDevolucion] = useState(null);
   const [devolucionFotoSubiendo, setDevolucionFotoSubiendo] = useState(false);
+  const [devolucionEscaneando, setDevolucionEscaneando] = useState(false);
+  const [devolucionEscaneoError, setDevolucionEscaneoError] = useState("");
   const [editandoMaterialId, setEditandoMaterialId] = useState(null);
   const [editMaterialForm, setEditMaterialForm] = useState({});
+  const [mostrarGaleria, setMostrarGaleria] = useState(false);
   // scan: { status: 'loading'|'review'|'error', foto, tienda, fecha, items:[], trabajoId, pagadoPor, empleadoPagadorId, cuentaId, errorMsg }
 
   // Agrupa los materiales por facturaId (los que vinieron juntos de un escaneo) — los sueltos quedan cada uno en su propio "grupo" de 1.
+  // Después, esos grupos se organizan por trabajo (número de trabajo primero, los sin número al final,
+  // y los sin trabajo asignado al final de todos), y dentro de cada trabajo se ordenan por fecha, del más reciente al más viejo.
   const gruposMateriales = useMemo(() => {
     const porFactura = {};
     const sueltos = [];
@@ -2004,11 +2232,38 @@ function Materiales({ data, update, onViewPhoto }) {
       }
     });
     const grupos = [
-      ...Object.entries(porFactura).map(([facturaId, items]) => ({ facturaId, items, fechaOrden: items[0]?.fecha || "" })),
-      ...sueltos.map((m) => ({ facturaId: null, items: [m], fechaOrden: m.fecha })),
+      ...Object.entries(porFactura).map(([facturaId, items]) => ({ facturaId, items, fechaOrden: items[0]?.fecha || "", trabajoId: items[0]?.trabajoId || "" })),
+      ...sueltos.map((m) => ({ facturaId: null, items: [m], fechaOrden: m.fecha, trabajoId: m.trabajoId || "" })),
     ];
     return grupos.sort((a, b) => (a.fechaOrden < b.fechaOrden ? 1 : -1));
   }, [data.materiales]);
+
+  // Los mismos grupos de arriba, pero organizados por trabajo para la vista agrupada.
+  const gruposPorTrabajo = useMemo(() => {
+    const porTrabajo = {};
+    gruposMateriales.forEach((g) => {
+      const key = g.trabajoId || "__sin_trabajo__";
+      if (!porTrabajo[key]) porTrabajo[key] = [];
+      porTrabajo[key].push(g);
+    });
+    const bloques = Object.entries(porTrabajo).map(([trabajoId, grupos]) => {
+      const trab = trabajoId !== "__sin_trabajo__" ? data.trabajos.find((t) => t.id === trabajoId) : null;
+      return { trabajoId: trabajoId === "__sin_trabajo__" ? "" : trabajoId, trab, grupos, fechaOrden: grupos[0]?.fechaOrden || "" };
+    });
+    // Ordena los bloques por número de trabajo (numérico); los sin número, y los sin trabajo asignado, van al final.
+    bloques.sort((a, b) => {
+      if (!a.trabajoId && !b.trabajoId) return 0;
+      if (!a.trabajoId) return 1;
+      if (!b.trabajoId) return -1;
+      const na = parseInt(a.trab?.numeroTrabajo, 10);
+      const nb = parseInt(b.trab?.numeroTrabajo, 10);
+      const va = isNaN(na) ? Infinity : na;
+      const vb = isNaN(nb) ? Infinity : nb;
+      if (va !== vb) return va - vb;
+      return (a.fechaOrden < b.fechaOrden ? 1 : -1);
+    });
+    return bloques;
+  }, [gruposMateriales, data.trabajos]);
 
   const addMaterial = () => {
     if (!form?.descripcion || !form?.monto) return;
@@ -2022,6 +2277,8 @@ function Materiales({ data, update, onViewPhoto }) {
         fecha: form.fecha || todayISO(),
         pagadoPor: pagadoPorFinal,
         cuentaId: form.cuentaId || "",
+        numeroCheque: form.numeroCheque || "",
+        numeroInvoice: form.numeroInvoice || "",
         reembolsado: false,
         fotos: form.fotos || [],
       })
@@ -2068,6 +2325,7 @@ function Materiales({ data, update, onViewPhoto }) {
         fotos,
         tienda: parsed.tienda || "",
         fecha: parsed.fecha || todayISO(),
+        impuesto: parsed.impuesto ?? "",
         items: parsed.items.map((it) => ({
           id: uid(),
           descripcion: it.descripcion || "",
@@ -2107,6 +2365,9 @@ function Materiales({ data, update, onViewPhoto }) {
           cuentaId: scan.cuentaId || "",
           reembolsado: false,
           fotos: idx === 0 ? (scan.fotos || []) : [],
+          impuestoFactura: idx === 0 ? (Number(scan.impuesto) || 0) : 0,
+          numeroCheque: idx === 0 ? (scan.numeroCheque || "") : "",
+          numeroInvoice: idx === 0 ? (scan.numeroInvoice || "") : "",
           numeroProducto: it.numeroProducto || "",
           cantidad: it.cantidad || 1,
         });
@@ -2137,6 +2398,13 @@ function Materiales({ data, update, onViewPhoto }) {
             onClick={() => setForm({ fecha: todayISO() })}
           >
             <PenLine size={14} /> Captura manual
+          </button>
+          <button
+            className="text-sm flex items-center gap-1 px-3 border"
+            style={{ borderColor: LINE }}
+            onClick={() => setMostrarGaleria(true)}
+          >
+            <Camera size={14} /> Ver fotos por trabajo
           </button>
         </div>
       )}
@@ -2197,6 +2465,38 @@ function Materiales({ data, update, onViewPhoto }) {
           </button>
 
           <Row label="Total detectado" value={money(totalEscaneo)} bold />
+
+          <div className="mt-2">
+            <label className="text-[11px] text-[#7A7263] block mb-0.5">Impuesto (tax) de esta factura</label>
+            <input
+              type="number"
+              className="ledger-input"
+              placeholder="0.00"
+              value={scan.impuesto}
+              onChange={(e) => setScan({ ...scan, impuesto: e.target.value })}
+            />
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-[#7A7263] block mb-0.5">Número de cheque (si aplica)</label>
+              <input
+                className="ledger-input"
+                placeholder="Ej. 1042"
+                value={scan.numeroCheque || ""}
+                onChange={(e) => setScan({ ...scan, numeroCheque: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-[#7A7263] block mb-0.5">Número de invoice</label>
+              <input
+                className="ledger-input"
+                placeholder="Si el recibo trae uno"
+                value={scan.numeroInvoice || ""}
+                onChange={(e) => setScan({ ...scan, numeroInvoice: e.target.value })}
+              />
+            </div>
+          </div>
 
           <div className="stamp text-[12px] text-[#7A7263] mt-3 mb-2">DATOS DE LA COMPRA</div>
           <div className="space-y-2">
@@ -2287,6 +2587,8 @@ function Materiales({ data, update, onViewPhoto }) {
               {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           )}
+          <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={form.numeroCheque || ""} onChange={(e) => setForm({ ...form, numeroCheque: e.target.value })} />
+          <input className="ledger-input" placeholder="Número de invoice (si el recibo trae uno)" value={form.numeroInvoice || ""} onChange={(e) => setForm({ ...form, numeroInvoice: e.target.value })} />
 
           <label className="flex items-center gap-2 border border-dashed p-3 cursor-pointer text-sm" style={{ borderColor: LINE }}>
             <Camera size={16} className="text-[#7A7263]" />
@@ -2323,7 +2625,18 @@ function Materiales({ data, update, onViewPhoto }) {
 
       <div className="card p-4">
         {data.materiales.length === 0 && <Empty text="Sin materiales registrados." />}
-        {gruposMateriales.map((grupo) => {
+        {gruposPorTrabajo.map((bloque) => (
+          <div key={bloque.trabajoId || "sin-trabajo"}>
+            <div className="flex items-center gap-2 pt-3 pb-1 first:pt-0">
+              <span className="stamp text-[12px] text-[#1E2A38]">
+                {bloque.trab ? `${bloque.trab.numeroTrabajo ? `#${bloque.trab.numeroTrabajo} · ` : ""}${bloque.trab.apodo || bloque.trab.nombre}` : "Sin trabajo asignado"}
+              </span>
+              {bloque.trab?.estado === "cerrado" && (
+                <span className="text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1EEE6", color: GREEN }}>Concluido</span>
+              )}
+              <div className="flex-1 h-px" style={{ background: AMBER }} />
+            </div>
+        {bloque.grupos.map((grupo) => {
           if (!grupo.facturaId) {
             // Material suelto (capturado a mano, sin factura de varios artículos) — se muestra igual que antes
             const m = grupo.items[0];
@@ -2345,7 +2658,9 @@ function Materiales({ data, update, onViewPhoto }) {
                     <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}><ImageOff size={14} /></div>
                   )}
                   <div>
-                    <div>{m.descripcion} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
+                    <div>{m.descripcion} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span>{trab?.estado === "cerrado" && (
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 ml-1" style={{ background: "#E1EEE6", color: GREEN }}>Concluido</span>
+                    )}</div>
                     <div className="text-[11px] text-[#7A7263]">
                       {fmtDate(m.fecha)} · pagado por {pagadorNombre(data, m.pagadoPor)}
                       {m.reembolsado ? " · reembolsado" : ""}
@@ -2446,6 +2761,8 @@ function Materiales({ data, update, onViewPhoto }) {
                           <option value="">Cuenta bancaria…</option>
                           {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
+                        <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
+                        <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                         <div className="flex gap-2">
                           <button
                             className="btn-primary text-xs"
@@ -2455,6 +2772,8 @@ function Materiales({ data, update, onViewPhoto }) {
                                 item.trabajoId = editMaterialForm.trabajoId || "";
                                 item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                 item.cuentaId = editMaterialForm.cuentaId || "";
+                                item.numeroCheque = editMaterialForm.numeroCheque || "";
+                                item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                               });
                               setEditandoMaterialId(null);
                             }}
@@ -2469,7 +2788,7 @@ function Materiales({ data, update, onViewPhoto }) {
                         className="text-[11px] text-[#7A7263] underline mt-0.5 ml-2"
                         onClick={() => {
                           const esEmpleado = (m.pagadoPor || "").startsWith("empleado:");
-                          setEditMaterialForm({ trabajoId: m.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (m.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? m.pagadoPor.slice("empleado:".length) : "", cuentaId: m.cuentaId || "" });
+                          setEditMaterialForm({ trabajoId: m.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (m.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? m.pagadoPor.slice("empleado:".length) : "", cuentaId: m.cuentaId || "", numeroCheque: m.numeroCheque || "", numeroInvoice: m.numeroInvoice || "" });
                           setEditandoMaterialId(m.id);
                         }}
                       >
@@ -2495,6 +2814,10 @@ function Materiales({ data, update, onViewPhoto }) {
           const subtotalOriginal = items.reduce((s, it) => s + Number(it.monto || 0), 0);
           const totalDevuelto = items.reduce((s, it) => s + Number(it.montoDevuelto || 0), 0);
           const totalNeto = subtotalOriginal - totalDevuelto;
+          // El impuesto se recalcula en proporción a lo devuelto: si devolviste la mitad de la factura, se descuenta la mitad del impuesto.
+          const impuestoOriginal = Number(items[0]?.impuestoFactura || 0);
+          const impuestoDevuelto = totalDevuelto > 0 && subtotalOriginal > 0 ? impuestoOriginal * (totalDevuelto / subtotalOriginal) : 0;
+          const impuestoNeto = impuestoOriginal - impuestoDevuelto;
           const fotoDevolucionFactura = items.find((it) => it.fotoDevolucion)?.fotoDevolucion;
           const editandoDevolucionFactura = devolucionId === "factura:" + grupo.facturaId;
 
@@ -2510,8 +2833,11 @@ function Materiales({ data, update, onViewPhoto }) {
                 ) : (
                   <div className="w-9 h-9 flex items-center justify-center border shrink-0 text-[#C9C1B0]" style={{ borderColor: LINE }}><ImageOff size={14} /></div>
                 )}
-                <div className="text-[12px] text-[#7A7263]">
-                  Factura · {items.length} artículos · {fmtDate(items[0].fecha)} {trab ? `· ${trab.apodo || trab.nombre}` : ""} · pagado por {pagadorNombre(data, items[0].pagadoPor)}
+                <div className="text-[12px] text-[#7A7263] flex items-center gap-1 flex-wrap">
+                  <span>Factura · {items.length} artículos · {fmtDate(items[0].fecha)} {trab ? `· ${trab.apodo || trab.nombre}` : ""} · pagado por {pagadorNombre(data, items[0].pagadoPor)}</span>
+                  {trab?.estado === "cerrado" && (
+                    <span className="text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1EEE6", color: GREEN }}>Concluido</span>
+                  )}
                 </div>
               </div>
 
@@ -2527,7 +2853,7 @@ function Materiales({ data, update, onViewPhoto }) {
                           className="text-[11px] text-[#7A7263] underline mr-2 shrink-0"
                           onClick={() => {
                             const esEmpleado = (it.pagadoPor || "").startsWith("empleado:");
-                            setEditMaterialForm({ trabajoId: it.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (it.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? it.pagadoPor.slice("empleado:".length) : "", cuentaId: it.cuentaId || "" });
+                            setEditMaterialForm({ trabajoId: it.trabajoId || "", pagadoPor: esEmpleado ? "empleado" : (it.pagadoPor || "empresa"), empleadoPagadorId: esEmpleado ? it.pagadoPor.slice("empleado:".length) : "", cuentaId: it.cuentaId || "", numeroCheque: it.numeroCheque || "", numeroInvoice: it.numeroInvoice || "" });
                             setEditandoMaterialId(it.id);
                           }}
                         >
@@ -2578,6 +2904,8 @@ function Materiales({ data, update, onViewPhoto }) {
                             <option value="">Cuenta bancaria…</option>
                             {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
+                          <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
+                          <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                           <div className="flex gap-2">
                             <button
                               className="btn-primary text-xs"
@@ -2587,6 +2915,8 @@ function Materiales({ data, update, onViewPhoto }) {
                                   item.trabajoId = editMaterialForm.trabajoId || "";
                                   item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                   item.cuentaId = editMaterialForm.cuentaId || "";
+                                  item.numeroCheque = editMaterialForm.numeroCheque || "";
+                                  item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                                 });
                                 setEditandoMaterialId(null);
                               }}
@@ -2614,6 +2944,43 @@ function Materiales({ data, update, onViewPhoto }) {
               {editandoDevolucionFactura ? (
                 <div className="pl-2 mb-1 space-y-1.5">
                   <div className="text-[11px] text-[#7A7263]">¿Cuáles artículos devolviste? (marca los que aplique, puedes ajustar el monto si fue parcial)</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <label className="text-[11px] underline cursor-pointer flex items-center gap-0.5" style={{ color: AMBER }}>
+                      <Camera size={12} /> {devolucionEscaneando ? "Leyendo recibo…" : "Escanear recibo de devolución (IA)"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setDevolucionEscaneando(true);
+                          setDevolucionEscaneoError("");
+                          try {
+                            const dataUrl = await compressImage(file);
+                            const parsed = await extraerFacturaConIA(dataUrl);
+                            // Empareja lo leído por la IA con los artículos de esta factura, por nombre parecido.
+                            const seleccionInicial = {};
+                            (parsed.items || []).forEach((li) => {
+                              const nombreLeido = (li.descripcion || "").toLowerCase().trim();
+                              const match = items.find((it) => {
+                                const nombreOrig = (it.descripcion || "").toLowerCase().trim();
+                                return nombreOrig && (nombreOrig.includes(nombreLeido) || nombreLeido.includes(nombreOrig));
+                              });
+                              if (match) seleccionInicial[match.id] = Number(li.monto) || 0;
+                            });
+                            setDevolucionSeleccion(seleccionInicial);
+                            setDevolucionImpuesto(parsed.impuesto ?? "");
+                            setDevolucionFoto(await subirFoto(dataUrl));
+                          } catch (err) {
+                            setDevolucionEscaneoError("No pude leer el recibo, intenta de nuevo o llénalo a mano.");
+                          }
+                          setDevolucionEscaneando(false);
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {devolucionEscaneoError && <div className="text-[11px] text-red-600">{devolucionEscaneoError}</div>}
                   {items.map((it) => {
                     const marcado = devolucionSeleccion[it.id] !== undefined;
                     return (
@@ -2644,6 +3011,16 @@ function Materiales({ data, update, onViewPhoto }) {
                       </div>
                     );
                   })}
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-[11px] text-[#7A7263]">Impuesto devuelto (según el recibo de la devolución):</span>
+                    <input
+                      className="ledger-input text-xs w-20 py-0.5"
+                      type="number"
+                      placeholder="0.00"
+                      value={devolucionImpuesto}
+                      onChange={(e) => setDevolucionImpuesto(e.target.value)}
+                    />
+                  </div>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1">
                     <label className="text-[11px] text-[#7A7263] underline cursor-pointer flex items-center gap-0.5">
                       <Camera size={12} /> {devolucionFotoSubiendo ? "Subiendo…" : (devolucionFoto ? "Foto agregada ✓" : "Agregar foto")}
@@ -2675,7 +3052,7 @@ function Materiales({ data, update, onViewPhoto }) {
                       onClick={() => {
                         update((d) => {
                           let primeraConFoto = false;
-                          items.forEach((it) => {
+                          items.forEach((it, idx) => {
                             const item = d.materiales.find((x) => x.id === it.id);
                             const monto = devolucionSeleccion[it.id] !== undefined ? Number(devolucionSeleccion[it.id]) || 0 : 0;
                             item.montoDevuelto = monto;
@@ -2685,17 +3062,19 @@ function Materiales({ data, update, onViewPhoto }) {
                             } else if (monto === 0) {
                               item.fotoDevolucion = "";
                             }
+                            if (idx === 0) item.impuestoDevuelto = Number(devolucionImpuesto) || 0;
                           });
                         });
                         if (devolucionFoto) setUltimaFotoDevolucion(devolucionFoto);
                         setDevolucionId(null);
                         setDevolucionFoto(null);
                         setDevolucionSeleccion({});
+                        setDevolucionImpuesto("");
                       }}
                     >
                       <Check size={14} /> Guardar devolución
                     </button>
-                    <button className="text-sm text-[#7A7263] px-2" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); setDevolucionSeleccion({}); }}>Cancelar</button>
+                    <button className="text-sm text-[#7A7263] px-2" onClick={() => { setDevolucionId(null); setDevolucionFoto(null); setDevolucionSeleccion({}); setDevolucionImpuesto(""); }}>Cancelar</button>
                   </div>
                 </div>
               ) : (
@@ -2707,6 +3086,7 @@ function Materiales({ data, update, onViewPhoto }) {
                     const seleccionInicial = {};
                     items.forEach((it) => { if (Number(it.montoDevuelto) > 0) seleccionInicial[it.id] = it.montoDevuelto; });
                     setDevolucionSeleccion(seleccionInicial);
+                    setDevolucionImpuesto(items[0]?.impuestoDevuelto || "");
                   }}
                 >
                   {totalDevuelto > 0 ? "Editar devolución de esta factura" : "¿Devolviste algún artículo de esta factura?"}
@@ -2717,9 +3097,96 @@ function Materiales({ data, update, onViewPhoto }) {
                 <div className="text-[12px]">
                   <span className="text-[#7A7263]">Subtotal factura: {money(subtotalOriginal)}</span>
                   {totalDevuelto > 0 && <span className="text-[#7A7263]"> · Devuelto: {money(totalDevuelto)}</span>}
+                  {impuestoOriginal > 0 && (
+                    <span className="text-[#7A7263]">
+                      {" "}· Impuesto: {money(impuestoNeto)}
+                      {impuestoDevuelto > 0 && <span> (se descontó {money(impuestoDevuelto)} por la devolución)</span>}
+                    </span>
+                  )}
+                  {items[0]?.numeroCheque && <span className="text-[#7A7263]"> · Cheque #{items[0].numeroCheque}</span>}
+                  {items[0]?.numeroInvoice && <span className="text-[#7A7263]"> · Invoice #{items[0].numeroInvoice}</span>}
                 </div>
                 <span className="mono font-medium">{money(totalNeto)}</span>
               </div>
+            </div>
+          );
+        })}
+          </div>
+        ))}
+      </div>
+
+      {mostrarGaleria && (
+        <GaleriaFacturasModal gruposPorTrabajo={gruposPorTrabajo} onViewPhoto={onViewPhoto} onClose={() => setMostrarGaleria(false)} />
+      )}
+    </div>
+  );
+}
+
+// Modal tipo "carpetas" con todas las fotos de facturas de materiales, agrupadas por número de trabajo —
+// para tenerlas todas juntas como archivo, sin tener que buscarlas una por una en la lista.
+function GaleriaFacturasModal({ gruposPorTrabajo, onViewPhoto, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-40 p-4" onClick={onClose}>
+      <div className="bg-white max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-3">
+          <span className="stamp text-[14px]">Fotos de facturas por trabajo</span>
+          <button onClick={onClose}><X size={20} /></button>
+        </div>
+        {gruposPorTrabajo.length === 0 && <Empty text="Sin fotos de facturas todavía." />}
+        {gruposPorTrabajo.map((bloque) => {
+          const fotosCompra = [];
+          const fotosDevolucion = [];
+          bloque.grupos.forEach((g) => {
+            g.items.forEach((it) => {
+              (it.fotos?.length ? it.fotos : (it.foto ? [it.foto] : [])).forEach((f) => fotosCompra.push(f));
+              if (it.fotoDevolucion) fotosDevolucion.push(it.fotoDevolucion);
+            });
+          });
+          if (fotosCompra.length === 0 && fotosDevolucion.length === 0) return null;
+          return (
+            <div key={bloque.trabajoId || "sin-trabajo"} className="mb-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[12px] font-medium">
+                  {bloque.trab ? `${bloque.trab.numeroTrabajo ? `#${bloque.trab.numeroTrabajo} · ` : ""}${bloque.trab.apodo || bloque.trab.nombre}` : "Sin trabajo asignado"}
+                </span>
+                {bloque.trab?.estado === "cerrado" && (
+                  <span className="text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1EEE6", color: GREEN }}>Concluido</span>
+                )}
+              </div>
+              {fotosCompra.length > 0 && (
+                <div className="mb-2">
+                  <div className="text-[10px] uppercase text-[#7A7263] mb-1">Facturas de compra</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {fotosCompra.map((f, idx) => (
+                      <img
+                        key={idx}
+                        src={f}
+                        alt={`Factura ${idx + 1}`}
+                        className="w-16 h-16 object-cover border cursor-pointer"
+                        style={{ borderColor: LINE }}
+                        onClick={() => onViewPhoto?.(f)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {fotosDevolucion.length > 0 && (
+                <div>
+                  <div className="text-[10px] uppercase mb-1" style={{ color: AMBER }}>Devoluciones</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {fotosDevolucion.map((f, idx) => (
+                      <img
+                        key={idx}
+                        src={f}
+                        alt={`Devolución ${idx + 1}`}
+                        className="w-16 h-16 object-cover border cursor-pointer"
+                        style={{ borderColor: AMBER }}
+                        onClick={() => onViewPhoto?.(f)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -3266,8 +3733,22 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
     ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: i.concepto, monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
     ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}`, monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}`, monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
-    ...materialesC.map((m) => ({ fecha: m.fecha, tipo: "Material", detalle: m.descripcion, monto: materialNeto(m), signo: -1, formaPago: "" })),
-    ...nominaC.map((n) => ({ fecha: n.fecha, tipo: "Nómina", detalle: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—", monto: n.monto, signo: -1, formaPago: "" })),
+    ...materialesC.map((m) => ({
+      fecha: m.fecha,
+      tipo: "Material",
+      detalle: m.descripcion + (m.numeroInvoice ? ` (invoice #${m.numeroInvoice})` : ""),
+      monto: materialNeto(m),
+      signo: -1,
+      formaPago: m.numeroCheque ? `Cheque #${m.numeroCheque}` : "",
+    })),
+    ...nominaC.map((n) => ({
+      fecha: n.fecha,
+      tipo: "Nómina",
+      detalle: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—",
+      monto: n.monto,
+      signo: -1,
+      formaPago: n.numeroCheque ? `Cheque #${n.numeroCheque}` : "",
+    })),
   ].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 
   const saldo = calcCuentaSaldo(cuenta, data);
@@ -3313,7 +3794,7 @@ function ReciboModal({ trabajo, data, onClose }) {
   const reembolsosTrabajo = {};
   const acumular = (item, tipo) => {
     const p = item.pagadoPor;
-    if (!p || p === "empresa" || p === "cliente" || item.reembolsado) return;
+    if (!p || p === "empresa" || p === "cliente" || p === "sindefinir" || item.reembolsado) return;
     const nombre = pagadorNombre(data, p);
     const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
     if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0 };
