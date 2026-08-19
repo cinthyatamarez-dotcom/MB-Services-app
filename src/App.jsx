@@ -209,7 +209,8 @@ export default function App() {
   }
 
   const desbloquear = () => {
-    if (claveInput === CLAVE_EDICION) {
+    const claveGuardada = data.claveEdicion || CLAVE_EDICION;
+    if (claveInput === claveGuardada) {
       setDesbloqueado(true);
       setShowClave(false);
       setClaveInput("");
@@ -589,7 +590,9 @@ function socioTurnoNominaTrabajo(data, trabajoId) {
 /* ---------------- Dashboard ---------------- */
 function Dashboard({ data }) {
   const trabajosActivos = data.trabajos.filter((t) => t.estado !== "cerrado");
-  const totales = data.trabajos.reduce(
+  const totales = data.trabajos
+    .filter((t) => !t.pagoPersonal)
+    .reduce(
     (acc, t) => {
       const c = calcTrabajo(t, data);
       acc.estimado += Number(t.estimado || 0);
@@ -754,6 +757,7 @@ function Trabajos({ data, update, onViewPhoto }) {
   const [orden, setOrden] = useState("numero"); // "numero" = orden en que se agregaron, "abecedario" = A-Z
   const [materialesTrabajo, setMaterialesTrabajo] = useState(null);
   const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
+  const [mostrarPagosPersonales, setMostrarPagosPersonales] = useState(false);
 
   const addTrabajo = () => {
     if (!form?.nombre) return;
@@ -775,6 +779,10 @@ function Trabajos({ data, update, onViewPhoto }) {
         fechaTerminado: "",
         fechaFacturaEnviada: "",
         estado: "activo",
+        pagoPersonal: !!form.pagoPersonal,
+        formaPagoPersonal: form.pagoPersonal ? (form.formaPagoPersonal || "efectivo") : "",
+        numeroChequePersonal: form.pagoPersonal && form.formaPagoPersonal === "cheque" ? (form.numeroChequePersonal || "") : "",
+        montoRecibidoPersonal: form.pagoPersonal ? Number(form.montoRecibidoPersonal || 0) : 0,
       });
     });
     setForm(null);
@@ -784,11 +792,21 @@ function Trabajos({ data, update, onViewPhoto }) {
     <div>
       <SectionTitle sub="Estimado menos materiales y mano de obra = ganancia, dividida 50/50">Trabajos</SectionTitle>
 
-      {!form ? (
-        <button className="btn-primary mb-4" onClick={() => setForm({ fecha: todayISO() })}>
-          <Plus size={15} /> Nuevo trabajo
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {!form && (
+          <button className="btn-primary" onClick={() => setForm({ fecha: todayISO() })}>
+            <Plus size={15} /> Nuevo trabajo
+          </button>
+        )}
+        <button
+          className="text-[12px] px-2.5 py-1.5 border flex items-center gap-1"
+          style={{ borderColor: AMBER, color: AMBER }}
+          onClick={() => setMostrarPagosPersonales(true)}
+        >
+          <Printer size={13} /> Reporte de trabajos por fuera
         </button>
-      ) : (
+      </div>
+      {form && (
         <div className="card p-4 mb-4 space-y-2">
           <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
             <Briefcase size={16} className="text-[#7A7263] ml-2.5 shrink-0" />
@@ -829,6 +847,24 @@ function Trabajos({ data, update, onViewPhoto }) {
           <label className="text-[11px] text-[#7A7263] block">Fecha de inicio</label>
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           <input className="ledger-input" type="number" placeholder="Tiempo estimado para terminar (días)" value={form.diasEstimados || ""} onChange={(e) => setForm({ ...form, diasEstimados: e.target.value })} />
+          <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+            <input type="checkbox" checked={!!form.pagoPersonal} onChange={(e) => setForm({ ...form, pagoPersonal: e.target.checked })} />
+            Se paga a cuenta personal (no es dinero de la empresa — se excluye del reparto de ganancia)
+          </label>
+          {form.pagoPersonal && (
+            <div className="border p-2 space-y-2" style={{ borderColor: AMBER }}>
+              <label className="text-[11px] text-[#7A7263] block">¿Cómo se cobró este trabajo?</label>
+              <select className="ledger-input" value={form.formaPagoPersonal || "efectivo"} onChange={(e) => setForm({ ...form, formaPagoPersonal: e.target.value })}>
+                <option value="efectivo">Efectivo</option>
+                <option value="cheque">Cheque</option>
+                <option value="zelle">Zelle</option>
+              </select>
+              {form.formaPagoPersonal === "cheque" && (
+                <input className="ledger-input" placeholder="Número de cheque" value={form.numeroChequePersonal || ""} onChange={(e) => setForm({ ...form, numeroChequePersonal: e.target.value })} />
+              )}
+              <input className="ledger-input" type="number" placeholder="Monto recibido" value={form.montoRecibidoPersonal || ""} onChange={(e) => setForm({ ...form, montoRecibidoPersonal: e.target.value })} />
+            </div>
+          )}
           <div className="flex gap-2 pt-1">
             <button className="btn-primary" onClick={addTrabajo}><Check size={14} /> Guardar</button>
             <button className="text-sm text-[#7A7263] px-3" onClick={() => setForm(null)}>Cancelar</button>
@@ -893,6 +929,9 @@ function Trabajos({ data, update, onViewPhoto }) {
                   <div className="font-medium text-sm">
                     <span className="mono text-[#7A7263] mr-1.5">{t.numeroTrabajo ? `#${t.numeroTrabajo}` : `${idx + 1}.`}</span>
                     {t.apodo || t.nombre}
+                    {t.pagoPersonal && (
+                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Pago personal</span>
+                    )}
                   </div>
                   <div className="text-[12px] text-[#7A7263]">
                     {t.apodo ? `${t.nombre} · ` : ""}{t.cliente}{t.managerCliente ? ` (${t.managerCliente})` : ""}
@@ -1156,6 +1195,43 @@ function Trabajos({ data, update, onViewPhoto }) {
                       />
                     </div>
                   </div>
+                  <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer mb-2">
+                    <input
+                      type="checkbox"
+                      checked={!!t.pagoPersonal}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).pagoPersonal = e.target.checked; })}
+                    />
+                    Se paga a cuenta personal (no es dinero de la empresa — se excluye del reparto de ganancia)
+                  </label>
+                  {t.pagoPersonal && (
+                    <div className="border p-2 space-y-2 mb-2" style={{ borderColor: AMBER }}>
+                      <label className="text-[11px] text-[#7A7263] block">¿Cómo se cobró este trabajo?</label>
+                      <select
+                        className="ledger-input text-xs"
+                        value={t.formaPagoPersonal || "efectivo"}
+                        onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).formaPagoPersonal = e.target.value; })}
+                      >
+                        <option value="efectivo">Efectivo</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="zelle">Zelle</option>
+                      </select>
+                      {t.formaPagoPersonal === "cheque" && (
+                        <input
+                          className="ledger-input text-xs"
+                          placeholder="Número de cheque"
+                          value={t.numeroChequePersonal || ""}
+                          onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).numeroChequePersonal = e.target.value; })}
+                        />
+                      )}
+                      <input
+                        className="ledger-input text-xs"
+                        type="number"
+                        placeholder="Monto recibido"
+                        value={t.montoRecibidoPersonal ?? ""}
+                        onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).montoRecibidoPersonal = Number(e.target.value); })}
+                      />
+                    </div>
+                  )}
                   <div className="flex justify-between items-center pt-3">
                     <select
                       className="ledger-input w-auto text-xs"
@@ -1197,6 +1273,7 @@ function Trabajos({ data, update, onViewPhoto }) {
       </div>
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
+      {mostrarPagosPersonales && <PagosPersonalesModal data={data} onClose={() => setMostrarPagosPersonales(false)} />}
     </div>
   );
 }
@@ -1786,6 +1863,9 @@ function Bitacora({ data, update }) {
                           Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
                           {pago.numeroCheque ? ` · cheque #${pago.numeroCheque}` : ""}
                           {pago.reembolsado ? " · reembolsado" : ""}
+                          {pago.antesSociedad && (
+                            <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                          )}
                         </span>
                         <span className="flex items-center gap-2 shrink-0 ml-2">
                           <button
@@ -1891,6 +1971,7 @@ function Nomina({ data, update }) {
         pagadoPor: payForm.pagadoPor || "empresa",
         cuentaId: payForm.cuentaId || "",
         numeroCheque: payForm.numeroCheque || "",
+        antesSociedad: !!payForm.antesSociedad,
         estado: payForm.estado || "pagado",
         reembolsado: false,
       })
@@ -2058,6 +2139,10 @@ function Nomina({ data, update }) {
                 {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
               <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={payForm.numeroCheque || ""} onChange={(e) => setPayForm({ ...payForm, numeroCheque: e.target.value })} />
+              <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+                <input type="checkbox" checked={!!payForm.antesSociedad} onChange={(e) => setPayForm({ ...payForm, antesSociedad: e.target.checked })} />
+                Pagado con dinero de antes de la sociedad
+              </label>
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addPago}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setPayForm(null)}>Cancelar</button>
@@ -2152,7 +2237,12 @@ function Nomina({ data, update }) {
                 <div className="flex justify-between items-center text-sm">
                   <div>
                     <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
-                    <div className="text-[11px] text-[#7A7263]">{fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.numeroCheque ? ` · cheque #${n.numeroCheque}` : ""}{n.reembolsado ? " · reembolsado" : ""}</div>
+                    <div className="text-[11px] text-[#7A7263]">
+                      {fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.numeroCheque ? ` · cheque #${n.numeroCheque}` : ""}{n.reembolsado ? " · reembolsado" : ""}
+                      {n.antesSociedad && (
+                        <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                      )}
+                    </div>
                     <button
                       className="text-[11px] font-medium px-2 py-0.5 border mt-1"
                       style={{
@@ -3220,6 +3310,8 @@ function Cuentas({ data, update }) {
         concepto: incomeForm.concepto || "Pago de cliente",
         formaPago: incomeForm.formaPago || "efectivo",
         numeroCheque: incomeForm.formaPago === "cheque" ? (incomeForm.numeroCheque || "") : "",
+        antesSociedad: !!incomeForm.antesSociedad,
+        numeroInvoice: incomeForm.numeroInvoice || "",
       })
     );
     setIncomeForm(null);
@@ -3236,6 +3328,7 @@ function Cuentas({ data, update }) {
         fecha: transferForm.fecha || todayISO(),
         formaPago: transferForm.formaPago || "efectivo",
         numeroCheque: transferForm.formaPago === "cheque" ? (transferForm.numeroCheque || "") : "",
+        antesSociedad: !!transferForm.antesSociedad,
       })
     );
     setTransferForm(null);
@@ -3292,6 +3385,25 @@ function Cuentas({ data, update }) {
         </div>
       )}
 
+      {(() => {
+        const entrado = data.ingresos.filter((i) => i.antesSociedad).reduce((s, i) => s + Number(i.monto || 0), 0);
+        const gastado =
+          data.nomina.filter((n) => n.antesSociedad).reduce((s, n) => s + Number(n.monto || 0), 0) +
+          data.transferencias.filter((t) => t.antesSociedad).reduce((s, t) => s + Number(t.monto || 0), 0);
+        if (entrado === 0 && gastado === 0) return null;
+        const disponible = entrado - gastado;
+        return (
+          <div className="card p-4 mb-4" style={{ borderColor: AMBER }}>
+            <div className="stamp text-[12px] mb-2" style={{ color: AMBER }}>DINERO DE ANTES DE LA SOCIEDAD</div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
+              <span>Entrado: <b className="mono">{money(entrado)}</b></span>
+              <span>Gastado: <b className="mono">{money(gastado)}</b></span>
+              <span>Disponible: <b className="mono" style={{ color: disponible >= 0 ? GREEN : RED }}>{money(disponible)}</b></span>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="card p-4">
           <div className="stamp text-[13px] text-[#7A7263] mb-3">INGRESO DE CLIENTE</div>
@@ -3317,6 +3429,12 @@ function Cuentas({ data, update }) {
               {incomeForm.formaPago === "cheque" && (
                 <input className="ledger-input" placeholder="Número de cheque" value={incomeForm.numeroCheque || ""} onChange={(e) => setIncomeForm({ ...incomeForm, numeroCheque: e.target.value })} />
               )}
+              <input className="ledger-input" placeholder="Concepto (ej. trabajo, cliente...)" value={incomeForm.concepto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, concepto: e.target.value })} />
+              <input className="ledger-input" placeholder="Número de invoice (si aplica)" value={incomeForm.numeroInvoice || ""} onChange={(e) => setIncomeForm({ ...incomeForm, numeroInvoice: e.target.value })} />
+              <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+                <input type="checkbox" checked={!!incomeForm.antesSociedad} onChange={(e) => setIncomeForm({ ...incomeForm, antesSociedad: e.target.checked })} />
+                Es dinero de antes de la sociedad (no mezclar con lo normal)
+              </label>
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addIngreso}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setIncomeForm(null)}>Cancelar</button>
@@ -3329,7 +3447,14 @@ function Cuentas({ data, update }) {
                 const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
                 return (
                   <div key={ing.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
-                    <span>{fmtDate(ing.fecha)} · {cuenta?.nombre || "—"} · {formaPagoTexto(ing.formaPago, ing.numeroCheque)}</span>
+                    <span>
+                      {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"} · {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
+                      {ing.concepto ? ` · ${ing.concepto}` : ""}
+                      {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
+                      {ing.antesSociedad && (
+                        <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                      )}
+                    </span>
                     <span className="flex items-center gap-1.5">
                       <span className="mono" style={{ color: GREEN }}>{money(ing.monto)}</span>
                       <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
@@ -3367,6 +3492,11 @@ function Cuentas({ data, update }) {
               {transferForm.formaPago === "cheque" && (
                 <input className="ledger-input" placeholder="Número de cheque" value={transferForm.numeroCheque || ""} onChange={(e) => setTransferForm({ ...transferForm, numeroCheque: e.target.value })} />
               )}
+              <input className="ledger-input" placeholder="Concepto (ej. aporte de Boris)" value={transferForm.concepto || ""} onChange={(e) => setTransferForm({ ...transferForm, concepto: e.target.value })} />
+              <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+                <input type="checkbox" checked={!!transferForm.antesSociedad} onChange={(e) => setTransferForm({ ...transferForm, antesSociedad: e.target.checked })} />
+                Se descuenta del dinero de antes de la sociedad
+              </label>
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addTransfer}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setTransferForm(null)}>Cancelar</button>
@@ -3380,7 +3510,13 @@ function Cuentas({ data, update }) {
                 const a = data.cuentas.find((c) => c.id === tr.aCuentaId);
                 return (
                   <div key={tr.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
-                    <span>{fmtDate(tr.fecha)} · {de?.nombre || "—"} → {a?.nombre || "—"} · {formaPagoTexto(tr.formaPago, tr.numeroCheque)}</span>
+                    <span>
+                      {fmtDate(tr.fecha)} · {de?.nombre || "—"} → {a?.nombre || "—"} · {formaPagoTexto(tr.formaPago, tr.numeroCheque)}
+                      {tr.concepto ? ` · ${tr.concepto}` : ""}
+                      {tr.antesSociedad && (
+                        <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                      )}
+                    </span>
                     <span className="flex items-center gap-1.5">
                       <span className="mono">{money(tr.monto)}</span>
                       <button className="text-[#A13D2E]" onClick={() => update((d) => { d.transferencias = d.transferencias.filter((x) => x.id !== tr.id); })}>
@@ -3595,6 +3731,10 @@ function SociosModal({ data, update, onClose }) {
   const [names, setNames] = useState(data.socios.map((s) => s.nombre));
   const [empresaNombre, setEmpresaNombre] = useState(data.empresaNombre || "");
   const [rot, setRot] = useState(data.rotacionNomina || { activa: false, socioInicioId: "s1", mesInicio: todayISO().slice(0, 7) });
+  const [claveActual, setClaveActual] = useState("");
+  const [claveNueva1, setClaveNueva1] = useState("");
+  const [claveNueva2, setClaveNueva2] = useState("");
+  const [claveMsg, setClaveMsg] = useState("");
 
   const save = () => {
     update((d) => {
@@ -3603,6 +3743,27 @@ function SociosModal({ data, update, onClose }) {
       d.rotacionNomina = rot;
     });
     onClose();
+  };
+
+  const cambiarClave = () => {
+    const claveGuardada = data.claveEdicion || CLAVE_EDICION;
+    if (claveActual !== claveGuardada) {
+      setClaveMsg("La contraseña actual no es correcta.");
+      return;
+    }
+    if (!claveNueva1 || claveNueva1.length < 4) {
+      setClaveMsg("La nueva contraseña debe tener al menos 4 caracteres.");
+      return;
+    }
+    if (claveNueva1 !== claveNueva2) {
+      setClaveMsg("Las dos contraseñas nuevas no coinciden.");
+      return;
+    }
+    update((d) => { d.claveEdicion = claveNueva1; });
+    setClaveActual("");
+    setClaveNueva1("");
+    setClaveNueva2("");
+    setClaveMsg("¡Contraseña cambiada! Úsala la próxima vez que desbloquees.");
   };
 
   return (
@@ -3643,6 +3804,13 @@ function SociosModal({ data, update, onClose }) {
         )}
 
         <button className="btn-primary mt-4" onClick={save}><Check size={14} /> Guardar</button>
+
+        <div className="stamp text-[12px] text-[#7A7263] mt-6 mb-2">CAMBIAR CONTRASEÑA DE EDICIÓN</div>
+        <input type="password" className="ledger-input mb-2" placeholder="Contraseña actual" value={claveActual} onChange={(e) => { setClaveActual(e.target.value); setClaveMsg(""); }} />
+        <input type="password" className="ledger-input mb-2" placeholder="Contraseña nueva" value={claveNueva1} onChange={(e) => { setClaveNueva1(e.target.value); setClaveMsg(""); }} />
+        <input type="password" className="ledger-input mb-2" placeholder="Repite la contraseña nueva" value={claveNueva2} onChange={(e) => { setClaveNueva2(e.target.value); setClaveMsg(""); }} />
+        {claveMsg && <p className="text-[12px] mb-2" style={{ color: claveMsg.startsWith("¡") ? GREEN : "#A13D2E" }}>{claveMsg}</p>}
+        <button className="btn-primary" onClick={cambiarClave}><Check size={14} /> Cambiar contraseña</button>
       </div>
     </div>
   );
@@ -3669,6 +3837,44 @@ function HojaImprimible({ titulo, subtitulo, onClose, children }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function PagosPersonalesModal({ data, onClose }) {
+  const trabajosPersonales = data.trabajos.filter((t) => t.pagoPersonal).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const total = trabajosPersonales.reduce((s, t) => s + Number(t.estimado || 0), 0);
+  return (
+    <HojaImprimible titulo="Trabajos por fuera" subtitulo="Pagados a cuenta personal (no son de la empresa)" onClose={onClose}>
+      {trabajosPersonales.length === 0 && <div className="text-sm py-2">— sin trabajos marcados como pago personal —</div>}
+      {trabajosPersonales.map((t) => {
+        const c = calcTrabajo(t, data);
+        return (
+          <div key={t.id} className="py-2" style={{ borderBottom: "1px dashed #ccc" }}>
+            <div className="flex justify-between text-base">
+              <span className="pr-2">{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</span>
+              <span className="whitespace-nowrap font-semibold">{money(t.estimado || 0)}</span>
+            </div>
+            <div className="text-xs" style={{ color: "#888" }}>
+              {t.cliente ? `${t.cliente} · ` : ""}{fmtDate(t.fecha)}
+              {t.direccion ? ` · ${t.direccion}` : ""}
+            </div>
+            <div className="text-xs" style={{ color: "#888" }}>
+              Materiales: {money(c.materiales)} · Mano de obra: {money(c.manoDeObra)}
+            </div>
+            {t.montoRecibidoPersonal > 0 && (
+              <div className="text-xs" style={{ color: "#888" }}>
+                Cobrado: {money(t.montoRecibidoPersonal)} · {t.formaPagoPersonal === "cheque" ? `Cheque${t.numeroChequePersonal ? ` #${t.numeroChequePersonal}` : ""}` : t.formaPagoPersonal === "zelle" ? "Zelle" : "Efectivo"}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div className="recibo-linea" />
+      <div className="flex justify-between text-lg font-bold">
+        <span>TOTAL ESTIMADO</span>
+        <span>{money(total)}</span>
+      </div>
+    </HojaImprimible>
   );
 }
 
@@ -3730,9 +3936,9 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
   const nominaC = data.nomina.filter((n) => n.cuentaId === cuenta.id);
 
   const movimientos = [
-    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: i.concepto, monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
-    ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}`, monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
-    ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}`, monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: (i.concepto || "") + (i.numeroInvoice ? ` (invoice #${i.numeroInvoice})` : "") + (i.antesSociedad ? " · Antes de la sociedad" : ""), monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
+    ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...materialesC.map((m) => ({
       fecha: m.fecha,
       tipo: "Material",
@@ -3744,7 +3950,7 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
     ...nominaC.map((n) => ({
       fecha: n.fecha,
       tipo: "Nómina",
-      detalle: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—",
+      detalle: (data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—") + (n.antesSociedad ? " · Antes de la sociedad" : ""),
       monto: n.monto,
       signo: -1,
       formaPago: n.numeroCheque ? `Cheque #${n.numeroCheque}` : "",
