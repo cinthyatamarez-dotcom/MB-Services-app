@@ -1503,6 +1503,8 @@ function Bitacora({ data, update }) {
         monto: Number(pagoForm.monto),
         pagadoPor: pagoForm.pagadoPor || "empresa",
         cuentaId: pagoForm.cuentaId || "",
+        numeroCheque: pagoForm.numeroCheque || "",
+        antesSociedad: !!pagoForm.antesSociedad,
         reembolsado: false,
       });
       const entrada = d.bitacora.find((x) => x.id === bitId);
@@ -1915,6 +1917,11 @@ function Bitacora({ data, update }) {
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
+                  <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={pagoForm.numeroCheque || ""} onChange={(e) => setPagoForm({ ...pagoForm, numeroCheque: e.target.value })} />
+                  <label className="flex items-center gap-1.5 text-[11px] text-[#7A7263] cursor-pointer">
+                    <input type="checkbox" checked={!!pagoForm.antesSociedad} onChange={(e) => setPagoForm({ ...pagoForm, antesSociedad: e.target.checked })} />
+                    Pagado con dinero de antes de la sociedad
+                  </label>
                   <div className="flex gap-2">
                     <button className="btn-primary" onClick={() => guardarPago(b.id)}><Check size={13} /> Guardar pago</button>
                     <button className="text-xs text-[#7A7263] px-2" onClick={() => { setPagoAbiertoId(null); setPagoForm({}); }}>Cancelar</button>
@@ -3312,6 +3319,7 @@ function Cuentas({ data, update }) {
         numeroCheque: incomeForm.formaPago === "cheque" ? (incomeForm.numeroCheque || "") : "",
         antesSociedad: !!incomeForm.antesSociedad,
         numeroInvoice: incomeForm.numeroInvoice || "",
+        fechaFacturaEnviada: incomeForm.fechaFacturaEnviada || "",
       })
     );
     setIncomeForm(null);
@@ -3431,6 +3439,10 @@ function Cuentas({ data, update }) {
               )}
               <input className="ledger-input" placeholder="Concepto (ej. trabajo, cliente...)" value={incomeForm.concepto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, concepto: e.target.value })} />
               <input className="ledger-input" placeholder="Número de invoice (si aplica)" value={incomeForm.numeroInvoice || ""} onChange={(e) => setIncomeForm({ ...incomeForm, numeroInvoice: e.target.value })} />
+              <div>
+                <label className="text-[11px] text-[#7A7263] block mb-0.5">Fecha en que se envió la factura/invoice</label>
+                <input className="ledger-input" type="date" value={incomeForm.fechaFacturaEnviada || ""} onChange={(e) => setIncomeForm({ ...incomeForm, fechaFacturaEnviada: e.target.value })} />
+              </div>
               <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
                 <input type="checkbox" checked={!!incomeForm.antesSociedad} onChange={(e) => setIncomeForm({ ...incomeForm, antesSociedad: e.target.checked })} />
                 Es dinero de antes de la sociedad (no mezclar con lo normal)
@@ -3451,6 +3463,7 @@ function Cuentas({ data, update }) {
                       {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"} · {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
                       {ing.concepto ? ` · ${ing.concepto}` : ""}
                       {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
+                      {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
                       {ing.antesSociedad && (
                         <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
                       )}
@@ -3936,7 +3949,7 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
   const nominaC = data.nomina.filter((n) => n.cuentaId === cuenta.id);
 
   const movimientos = [
-    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: (i.concepto || "") + (i.numeroInvoice ? ` (invoice #${i.numeroInvoice})` : "") + (i.antesSociedad ? " · Antes de la sociedad" : ""), monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
+    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: (i.concepto || "") + (i.numeroInvoice ? ` (invoice #${i.numeroInvoice})` : "") + (i.fechaFacturaEnviada ? ` · enviado ${fmtDate(i.fechaFacturaEnviada)}` : "") + (i.antesSociedad ? " · Antes de la sociedad" : ""), monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
     ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...materialesC.map((m) => ({
