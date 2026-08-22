@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
   ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock, MapPin
@@ -6,6 +6,23 @@ import {
 import { db, storage } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import { ref, uploadString, getDownloadURL } from "firebase/storage";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// Convierte una dirección de texto en coordenadas (lat/lng) usando el servicio gratuito de OpenStreetMap.
+// No requiere llave/API key. Se usa solo la primera vez por trabajo; luego las coordenadas se guardan.
+async function geocodificarDireccion(direccion) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(direccion)}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    const data = await res.json();
+    if (data && data[0]) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+  } catch {}
+  return null;
+}
+
 
 // Sube una foto (en formato dataURL, como la que da compressImage) a Firebase Storage
 // y devuelve el link público cortito — así el documento principal de la app nunca se llena,
@@ -758,6 +775,7 @@ function Trabajos({ data, update, onViewPhoto }) {
   const [materialesTrabajo, setMaterialesTrabajo] = useState(null);
   const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
   const [mostrarPagosPersonales, setMostrarPagosPersonales] = useState(false);
+  const [mostrarMapa, setMostrarMapa] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [busqueda, setBusqueda] = useState("");
 
@@ -800,6 +818,13 @@ function Trabajos({ data, update, onViewPhoto }) {
             <Plus size={15} /> Nuevo trabajo
           </button>
         )}
+        <button
+          className="text-[12px] px-2.5 py-1.5 border flex items-center gap-1"
+          style={{ borderColor: GREEN, color: GREEN }}
+          onClick={() => setMostrarMapa(true)}
+        >
+          <MapPin size={13} /> Ver mapa de trabajos
+        </button>
         <button
           className="text-[12px] px-2.5 py-1.5 border flex items-center gap-1"
           style={{ borderColor: AMBER, color: AMBER }}
@@ -1333,6 +1358,7 @@ function Trabajos({ data, update, onViewPhoto }) {
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
       {mostrarPagosPersonales && <PagosPersonalesModal data={data} onClose={() => setMostrarPagosPersonales(false)} />}
+      {mostrarMapa && <MapaTrabajosModal data={data} update={update} onClose={() => setMostrarMapa(false)} />}
     </div>
   );
 }
@@ -3917,6 +3943,179 @@ function HojaImprimible({ titulo, subtitulo, onClose, children }) {
           <div className="recibo-linea" />
           {children}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MapaTrabajosModal({ data, update, onClose }) {
+  const mapRef = useRef(null);
+  const mapInstance = useRef(null);
+  const markersRef = useRef({});
+  const [geocodificando, setGeocodificando] = useState(false);
+  const [trabajoAbierto, setTrabajoAbierto] = useState(null);
+
+  const colorEstado = (t) => {
+    if (t.estado === "cerrado") return "#3C7A5A"; // verde: concluido
+    if (t.progreso === "en_proceso") return "#C98A2C"; // ámbar: en proceso
+    return "#5B7A9D"; // azul: iniciado
+  };
+
+  const etiquetaEstado = (t) => {
+    if (t.estado === "cerrado") return "Concluido";
+    if (t.progreso === "en_proceso") return "En proceso";
+    return "Iniciado";
+  };
+
+  const cambiarEstado = (t, nuevo) => {
+    update((d) => {
+      const trab = d.trabajos.find((x) => x.id === t.id);
+      if (nuevo === "concluido") {
+        trab.estado = "cerrado";
+        trab.progreso = "en_proceso";
+      } else if (nuevo === "en_proceso") {
+        trab.estado = "activo";
+        trab.progreso = "en_proceso";
+      } else {
+        trab.estado = "activo";
+        trab.progreso = "iniciado";
+      }
+    });
+  };
+
+  // Inicializa el mapa una sola vez
+  useEffect(() => {
+    if (mapInstance.current || !mapRef.current) return;
+    mapInstance.current = L.map(mapRef.current).setView([33.75, -84.39], 9); // vista inicial: área de Atlanta
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap",
+      maxZoom: 19,
+    }).addTo(mapInstance.current);
+    return () => {
+      mapInstance.current?.remove();
+      mapInstance.current = null;
+    };
+  }, []);
+
+  // Geocodifica (una sola vez por trabajo) las direcciones que no tengan coordenadas guardadas todavía
+  useEffect(() => {
+    const pendientes = data.trabajos.filter((t) => t.direccion && (!t.mapLat || !t.mapLng));
+    if (pendientes.length === 0) return;
+    let cancelado = false;
+    (async () => {
+      setGeocodificando(true);
+      for (const t of pendientes) {
+        if (cancelado) break;
+        const coords = await geocodificarDireccion(t.direccion);
+        if (coords) {
+          update((d) => {
+            const trab = d.trabajos.find((x) => x.id === t.id);
+            if (trab) { trab.mapLat = coords.lat; trab.mapLng = coords.lng; }
+          });
+        }
+        await new Promise((r) => setTimeout(r, 1100)); // respeta el límite del servicio gratuito (máx. 1 por segundo)
+      }
+      setGeocodificando(false);
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.trabajos.map((t) => t.id + "|" + (t.direccion || "")).join(",")]);
+
+  // Dibuja/actualiza las tachuelas cada vez que cambian los trabajos
+  useEffect(() => {
+    if (!mapInstance.current) return;
+    const trabajosConCoords = data.trabajos.filter((t) => t.mapLat && t.mapLng);
+    const idsActuales = new Set(trabajosConCoords.map((t) => t.id));
+
+    // Quita tachuelas de trabajos que ya no tienen coordenadas (o se borraron)
+    Object.keys(markersRef.current).forEach((id) => {
+      if (!idsActuales.has(id)) {
+        markersRef.current[id].remove();
+        delete markersRef.current[id];
+      }
+    });
+
+    trabajosConCoords.forEach((t) => {
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="background:${colorEstado(t)};width:16px;height:16px;border-radius:50%;border:2px solid white;box-shadow:0 0 3px rgba(0,0,0,0.5);"></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8],
+      });
+      if (markersRef.current[t.id]) {
+        markersRef.current[t.id].setLatLng([t.mapLat, t.mapLng]);
+        markersRef.current[t.id].setIcon(icon);
+      } else {
+        const marker = L.marker([t.mapLat, t.mapLng], { icon }).addTo(mapInstance.current);
+        marker.on("click", () => setTrabajoAbierto(t.id));
+        markersRef.current[t.id] = marker;
+      }
+    });
+
+    // Si hay al menos un trabajo con coordenadas, ajusta la vista para que se vean todas las tachuelas
+    if (trabajosConCoords.length > 0) {
+      const bounds = L.latLngBounds(trabajosConCoords.map((t) => [t.mapLat, t.mapLng]));
+      mapInstance.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.trabajos]);
+
+  const trabSeleccionado = data.trabajos.find((t) => t.id === trabajoAbierto);
+  const sinDireccion = data.trabajos.filter((t) => !t.direccion).length;
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-40 p-2 sm:p-4" onClick={onClose}>
+      <div className="card w-full max-w-3xl h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center p-3" style={{ borderBottom: `1px solid ${LINE}` }}>
+          <div>
+            <div className="stamp text-[13px]">MAPA DE TRABAJOS</div>
+            <div className="text-[11px] text-[#7A7263]">
+              {geocodificando ? "Ubicando direcciones en el mapa…" : "Toca una tachuela para ver o cambiar el estado del trabajo"}
+              {sinDireccion > 0 ? ` · ${sinDireccion} trabajo(s) sin dirección` : ""}
+            </div>
+          </div>
+          <button onClick={onClose}><X size={18} /></button>
+        </div>
+
+        <div className="flex gap-3 px-3 py-2 text-[11px] text-[#7A7263]" style={{ borderBottom: `1px solid ${LINE}` }}>
+          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#5B7A9D", display: "inline-block" }} /> Iniciado</span>
+          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#C98A2C", display: "inline-block" }} /> En proceso</span>
+          <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#3C7A5A", display: "inline-block" }} /> Concluido</span>
+        </div>
+
+        <div className="flex-1 relative">
+          <div ref={mapRef} className="absolute inset-0" />
+        </div>
+
+        {trabSeleccionado && (
+          <div className="p-3" style={{ borderTop: `1px solid ${LINE}` }}>
+            <div className="font-medium text-sm mb-0.5">{trabSeleccionado.apodo || trabSeleccionado.nombre}</div>
+            <div className="text-[11px] text-[#7A7263] mb-2">{trabSeleccionado.direccion}</div>
+            <div className="flex gap-2">
+              {[
+                { key: "iniciado", label: "Iniciado", color: "#5B7A9D" },
+                { key: "en_proceso", label: "En proceso", color: "#C98A2C" },
+                { key: "concluido", label: "Concluido", color: "#3C7A5A" },
+              ].map((op) => {
+                const activo = etiquetaEstado(trabSeleccionado) === op.label;
+                return (
+                  <button
+                    key={op.key}
+                    className="text-[11px] px-2.5 py-1.5 border"
+                    style={{
+                      borderColor: op.color,
+                      background: activo ? op.color : "#fff",
+                      color: activo ? "#fff" : op.color,
+                    }}
+                    onClick={() => cambiarEstado(trabSeleccionado, op.key)}
+                  >
+                    {op.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
