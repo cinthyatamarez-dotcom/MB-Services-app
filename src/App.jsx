@@ -801,6 +801,7 @@ function Trabajos({ data, update, onViewPhoto }) {
   const [orden, setOrden] = useState("numero"); // "numero" = orden en que se agregaron, "abecedario" = A-Z
   const [materialesTrabajo, setMaterialesTrabajo] = useState(null);
   const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
+  const [pagosTrabajo, setPagosTrabajo] = useState(null);
   const [mostrarPagosPersonales, setMostrarPagosPersonales] = useState(false);
   const [mostrarMapa, setMostrarMapa] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("todos");
@@ -1374,6 +1375,12 @@ function Trabajos({ data, update, onViewPhoto }) {
                     <button className="text-[11px] text-[#7A7263] underline flex items-center gap-1" onClick={() => setBitacoraTrabajo(t)}>
                       <Printer size={12} /> Imprimir/descargar bitácora
                     </button>
+                    <button className="text-[11px] text-[#7A7263] underline flex items-center gap-1" onClick={() => setPagosTrabajo({ trabajo: t, tipo: "empresa" })}>
+                      <Printer size={12} /> Imprimir/descargar pagos — cuenta empresa
+                    </button>
+                    <button className="text-[11px] text-[#7A7263] underline flex items-center gap-1" onClick={() => setPagosTrabajo({ trabajo: t, tipo: "personal" })}>
+                      <Printer size={12} /> Imprimir/descargar pagos — cuenta personal/CashApp
+                    </button>
                   </div>
                 </div>
               )}
@@ -1384,6 +1391,7 @@ function Trabajos({ data, update, onViewPhoto }) {
       </div>
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
+      {pagosTrabajo && <PagosTrabajoModal trabajo={pagosTrabajo.trabajo} tipo={pagosTrabajo.tipo} data={data} onClose={() => setPagosTrabajo(null)} />}
       {mostrarPagosPersonales && <PagosPersonalesModal data={data} onClose={() => setMostrarPagosPersonales(false)} />}
       {mostrarMapa && <MapaTrabajosModal data={data} update={update} onClose={() => setMostrarMapa(false)} />}
     </div>
@@ -3423,7 +3431,7 @@ function Cuentas({ data, update }) {
 
   const addCuenta = () => {
     if (!form?.nombre) return;
-    update((d) => d.cuentas.push({ id: uid(), nombre: form.nombre, banco: form.banco || "", saldoInicial: Number(form.saldoInicial || 0) }));
+    update((d) => d.cuentas.push({ id: uid(), nombre: form.nombre, banco: form.banco || "", saldoInicial: Number(form.saldoInicial || 0), esPersonal: !!form.esPersonal }));
     setForm(null);
   };
 
@@ -3480,7 +3488,12 @@ function Cuentas({ data, update }) {
             <div key={c.id} className="card p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="font-medium text-sm">{c.nombre}</div>
+                  <div className="font-medium text-sm">
+                    {c.nombre}
+                    {c.esPersonal && (
+                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Personal</span>
+                    )}
+                  </div>
                   <div className="text-[11px] text-[#7A7263]">{c.banco}</div>
                 </div>
                 <button className="text-[#A13D2E]" onClick={() => update((d) => { d.cuentas = d.cuentas.filter((x) => x.id !== c.id); })}>
@@ -3508,6 +3521,10 @@ function Cuentas({ data, update }) {
           <input className="ledger-input" placeholder="Nombre de la cuenta (ej. Cuenta operativa)" value={form.nombre || ""} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
           <input className="ledger-input" placeholder="Banco" value={form.banco || ""} onChange={(e) => setForm({ ...form, banco: e.target.value })} />
           <input className="ledger-input" type="number" placeholder="Saldo inicial" value={form.saldoInicial || ""} onChange={(e) => setForm({ ...form, saldoInicial: e.target.value })} />
+          <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+            <input type="checkbox" checked={!!form.esPersonal} onChange={(e) => setForm({ ...form, esPersonal: e.target.checked })} />
+            Es cuenta personal (ej. CashApp de un socio, no de la empresa)
+          </label>
           <div className="flex gap-2">
             <button className="btn-primary" onClick={addCuenta}><Check size={14} /> Guardar</button>
             <button className="text-sm text-[#7A7263] px-2" onClick={() => setForm(null)}>Cancelar</button>
@@ -4307,6 +4324,42 @@ function PagosPersonalesModal({ data, onClose }) {
       <div className="recibo-linea" />
       <div className="flex justify-between text-lg font-bold">
         <span>TOTAL ESTIMADO</span>
+        <span>{money(total)}</span>
+      </div>
+    </HojaImprimible>
+  );
+}
+
+function PagosTrabajoModal({ trabajo, data, onClose, tipo }) {
+  const ingresosTrabajo = data.ingresos.filter((i) => i.trabajoId === trabajo.id);
+  const esDeEmpresa = (i) => !data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal;
+  const items = ingresosTrabajo.filter((i) => (tipo === "personal" ? !esDeEmpresa(i) : esDeEmpresa(i)));
+  const total = items.reduce((s, i) => s + Number(i.monto || 0), 0);
+
+  return (
+    <HojaImprimible
+      titulo={`Pagos recibidos — ${trabajo.apodo || trabajo.nombre}`}
+      subtitulo={tipo === "personal" ? "Cuenta personal (ej. CashApp)" : "Cuenta de la empresa"}
+      onClose={onClose}
+    >
+      {items.length === 0 && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
+      {items.map((i) => {
+        const cuenta = data.cuentas.find((c) => c.id === i.cuentaId);
+        return (
+          <div key={i.id} className="flex justify-between text-sm py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
+            <span>
+              {fmtDate(i.fecha)} · {cuenta?.nombre || "—"}
+              {i.concepto ? ` · ${i.concepto}` : ""}
+              {i.numeroCheque ? ` · Cheque #${i.numeroCheque}` : ""}
+              {i.numeroInvoice ? ` · Invoice #${i.numeroInvoice}` : ""}
+            </span>
+            <span className="whitespace-nowrap font-medium">{money(i.monto)}</span>
+          </div>
+        );
+      })}
+      <div className="recibo-linea" />
+      <div className="flex justify-between text-lg font-bold">
+        <span>TOTAL RECIBIDO</span>
         <span>{money(total)}</span>
       </div>
     </HojaImprimible>
