@@ -4222,15 +4222,54 @@ function MapaTrabajosModal({ data, update, onClose }) {
                 <button className="text-[11px] text-[#7A7263] px-1.5 shrink-0" onClick={() => setCorrigiendoId(null)}>Cancelar</button>
               </div>
             ) : (
-              <button className="text-[11px] text-[#7A7263] underline" onClick={() => setCorrigiendoId(trabSeleccionado.id)}>
-                Corregir ubicación en el mapa
-              </button>
+              <div className="flex items-center gap-3">
+                <button className="text-[11px] text-[#7A7263] underline" onClick={() => setCorrigiendoId(trabSeleccionado.id)}>
+                  Corregir ubicación en el mapa
+                </button>
+                {trabSeleccionado.mapLat && (
+                  <button
+                    className="text-[11px] underline"
+                    style={{ color: "#A13D2E" }}
+                    onClick={() => {
+                      update((d) => {
+                        const trab = d.trabajos.find((x) => x.id === trabSeleccionado.id);
+                        if (trab) { trab.mapLat = null; trab.mapLng = null; }
+                      });
+                      setTrabajoAbierto(null);
+                    }}
+                  >
+                    <Trash2 size={11} className="inline mr-0.5" /> Eliminar ubicación
+                  </button>
+                )}
+              </div>
             )}
             {errorLink[trabSeleccionado.id] && (
               <p className="text-[11px] mt-1" style={{ color: "#A13D2E" }}>No pude leer esas coordenadas, intenta de nuevo.</p>
             )}
           </div>
         )}
+
+        <div className="p-3" style={{ borderTop: `1px solid ${LINE}`, maxHeight: 180, overflowY: "auto" }}>
+          <div className="stamp text-[11px] text-[#7A7263] mb-1.5">TODOS LOS TRABAJOS</div>
+          <div className="space-y-1">
+            {data.trabajos.map((t) => (
+              <button
+                key={t.id}
+                className="w-full flex items-center gap-2 text-left text-[12px] py-0.5"
+                onClick={() => {
+                  setTrabajoAbierto(t.id);
+                  if (t.mapLat && t.mapLng && mapInstance.current) {
+                    mapInstance.current.setView([t.mapLat, t.mapLng], 15);
+                  }
+                }}
+              >
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: colorEstado(t), display: "inline-block", flexShrink: 0 }} />
+                <span className="flex-1 truncate">{t.apodo || t.nombre}</span>
+                <span className="text-[10px] text-[#7A7263] shrink-0">{etiquetaEstado(t)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
