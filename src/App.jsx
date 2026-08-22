@@ -23,6 +23,22 @@ async function geocodificarDireccion(direccion) {
   return null;
 }
 
+// Intenta sacar latitud/longitud de un link de Google Maps que la persona pegue
+// (copiado desde la barra de direcciones o al compartir un lugar desde la app de Maps)
+function extraerCoordsDeLinkMaps(texto) {
+  if (!texto) return null;
+  const patrones = [
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,        // .../@33.749,-84.388,17z
+    /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,   // ?q=33.749,-84.388
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,    // formato interno !3d..!4d..
+  ];
+  for (const p of patrones) {
+    const m = texto.match(p);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+  }
+  return null;
+}
+
 
 // Sube una foto (en formato dataURL, como la que da compressImage) a Firebase Storage
 // y devuelve el link público cortito — así el documento principal de la app nunca se llena,
@@ -3954,6 +3970,8 @@ function MapaTrabajosModal({ data, update, onClose }) {
   const markersRef = useRef({});
   const [geocodificando, setGeocodificando] = useState(false);
   const [trabajoAbierto, setTrabajoAbierto] = useState(null);
+  const [linkInputs, setLinkInputs] = useState({});
+  const [errorLink, setErrorLink] = useState({});
 
   const colorEstado = (t) => {
     if (t.estado === "cerrado") return "#3C7A5A"; // verde: concluido
@@ -4082,6 +4100,55 @@ function MapaTrabajosModal({ data, update, onClose }) {
           <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#C98A2C", display: "inline-block" }} /> En proceso</span>
           <span className="flex items-center gap-1"><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#3C7A5A", display: "inline-block" }} /> Concluido</span>
         </div>
+
+        {(() => {
+          const sinUbicar = data.trabajos.filter((t) => t.direccion && (!t.mapLat || !t.mapLng));
+          if (sinUbicar.length === 0) return null;
+          return (
+            <div className="px-3 py-2" style={{ borderBottom: `1px solid ${LINE}`, maxHeight: 220, overflowY: "auto" }}>
+              <div className="text-[11px] text-[#7A7263] mb-2">
+                Estos trabajos tienen dirección, pero el mapa no la encontró solo. Busca la dirección en la app de Google Maps, toca "Compartir" → "Copiar link", y pega ese link aquí:
+              </div>
+              <div className="space-y-2">
+                {sinUbicar.map((t) => (
+                  <div key={t.id} className="flex items-center gap-1.5">
+                    <span className="text-[11px] flex-1 truncate">{t.apodo || t.nombre}</span>
+                    <input
+                      className="ledger-input text-xs flex-1"
+                      placeholder="Pega aquí el link de Google Maps"
+                      value={linkInputs[t.id] || ""}
+                      onChange={(e) => setLinkInputs({ ...linkInputs, [t.id]: e.target.value })}
+                    />
+                    <button
+                      className="text-[11px] px-2 py-1.5 border shrink-0"
+                      style={{ borderColor: GREEN, color: GREEN }}
+                      onClick={() => {
+                        const coords = extraerCoordsDeLinkMaps(linkInputs[t.id]);
+                        if (!coords) {
+                          setErrorLink({ ...errorLink, [t.id]: true });
+                          return;
+                        }
+                        update((d) => {
+                          const trab = d.trabajos.find((x) => x.id === t.id);
+                          if (trab) { trab.mapLat = coords.lat; trab.mapLng = coords.lng; }
+                        });
+                        setLinkInputs({ ...linkInputs, [t.id]: "" });
+                        setErrorLink({ ...errorLink, [t.id]: false });
+                      }}
+                    >
+                      <Check size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {Object.values(errorLink).some(Boolean) && (
+                <p className="text-[11px] mt-1" style={{ color: "#A13D2E" }}>
+                  Ese link no lo pude leer — asegúrate de copiarlo desde "Compartir" en Google Maps, no un link acortado.
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="flex-1 relative">
           <div ref={mapRef} className="absolute inset-0" />
