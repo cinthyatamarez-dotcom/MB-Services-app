@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
-  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock
+  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock, MapPin
 } from "lucide-react";
 import { db, storage } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -924,7 +924,7 @@ function Trabajos({ data, update, onViewPhoto }) {
           const open = openId === t.id;
           return (
             <div key={t.id} className="card">
-              <button className="w-full text-left p-4 flex justify-between items-center" onClick={() => setOpenId(open ? null : t.id)}>
+              <div className="w-full text-left p-4 flex justify-between items-center cursor-pointer" onClick={() => setOpenId(open ? null : t.id)}>
                 <div>
                   <div className="font-medium text-sm">
                     <span className="mono text-[#7A7263] mr-1.5">{t.numeroTrabajo ? `#${t.numeroTrabajo}` : `${idx + 1}.`}</span>
@@ -935,7 +935,22 @@ function Trabajos({ data, update, onViewPhoto }) {
                   </div>
                   <div className="text-[12px] text-[#7A7263]">
                     {t.apodo ? `${t.nombre} · ` : ""}{t.cliente}{t.managerCliente ? ` (${t.managerCliente})` : ""}
-                    {t.direccion ? ` · ${t.direccion}` : ""} · {fmtDate(t.fecha)}{t.diasEstimados ? ` · ${t.diasEstimados} días est.` : ""}
+                    {t.direccion && (
+                      <>
+                        {" · "}
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.direccion)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline"
+                          style={{ color: GREEN }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {t.direccion}
+                        </a>
+                      </>
+                    )}
+                    {" · "}{fmtDate(t.fecha)}{t.diasEstimados ? ` · ${t.diasEstimados} días est.` : ""}
                   </div>
                   {(t.empleadoIds || []).length > 0 && (
                     <div className="text-[11px] text-[#7A7263] mt-0.5">
@@ -949,7 +964,7 @@ function Trabajos({ data, update, onViewPhoto }) {
                   </div>
                   <div className="text-[10px] text-[#7A7263] uppercase">{c.tienePagoReal ? "ganancia real" : "ganancia"}</div>
                 </div>
-              </button>
+              </div>
               {open && (
                 <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3 space-y-1">
                   <label className="text-[11px] text-[#7A7263] block mb-0.5">Nombre del trabajo</label>
@@ -1149,10 +1164,21 @@ function Trabajos({ data, update, onViewPhoto }) {
                   </div>
                   <label className="text-[11px] text-[#7A7263] block mb-0.5">Dirección</label>
                   <input
-                    className="ledger-input text-xs mb-2"
+                    className="ledger-input text-xs mb-1"
                     value={t.direccion || ""}
                     onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).direccion = e.target.value; })}
                   />
+                  {t.direccion && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t.direccion)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] underline flex items-center gap-1 mb-2"
+                      style={{ color: GREEN }}
+                    >
+                      <MapPin size={11} /> Abrir en Google Maps
+                    </a>
+                  )}
 
                   <div className="stamp text-[12px] text-[#7A7263] mt-4 mb-2">FECHAS Y TIEMPOS</div>
                   <div className="grid grid-cols-2 gap-2 mb-1">
@@ -1541,6 +1567,23 @@ function Bitacora({ data, update }) {
     <div>
       <SectionTitle sub="Qué se hizo cada día, quién participó, y el estado de cada quien por separado">Actividad diaria</SectionTitle>
 
+      {data.trabajos.length > 0 && (
+        <div className="card p-3 mb-4">
+          <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Ver actividad de:</label>
+          <div className="flex items-center gap-2">
+            <select className="ledger-input flex-1" value={filtroTrabajo} onChange={(e) => setFiltroTrabajo(e.target.value)}>
+              <option value="">Todos los trabajos</option>
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</option>)}
+            </select>
+            {filtroTrabajo && (
+              <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajo("")}>
+                Quitar filtro
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {data.trabajos.length === 0 ? (
         <div className="card p-4 mb-4">
           <p className="text-[13px] text-[#4A4238]">
@@ -1652,13 +1695,6 @@ function Bitacora({ data, update }) {
             <button className="text-sm text-[#7A7263] px-2" onClick={() => setForm(null)}>Cancelar</button>
           </div>
         </div>
-      )}
-
-      {data.trabajos.length > 0 && (
-        <select className="ledger-input mb-3" value={filtroTrabajo} onChange={(e) => setFiltroTrabajo(e.target.value)}>
-          <option value="">Todos los trabajos</option>
-          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
-        </select>
       )}
 
       <div className="space-y-2">
