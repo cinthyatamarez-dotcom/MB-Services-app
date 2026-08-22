@@ -759,6 +759,7 @@ function Trabajos({ data, update, onViewPhoto }) {
   const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
   const [mostrarPagosPersonales, setMostrarPagosPersonales] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [busqueda, setBusqueda] = useState("");
 
   const addTrabajo = () => {
     if (!form?.nombre) return;
@@ -874,6 +875,13 @@ function Trabajos({ data, update, onViewPhoto }) {
       )}
 
       <div className="card p-3 mb-4">
+        <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Buscar por nombre o cliente:</label>
+        <input
+          className="ledger-input mb-2"
+          placeholder="Escribe para buscar…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
         <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Ver trabajos:</label>
         <select className="ledger-input" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
           <option value="todos">Todos</option>
@@ -911,39 +919,39 @@ function Trabajos({ data, update, onViewPhoto }) {
 
       <div className="space-y-2">
         {data.trabajos.length === 0 && <Empty text="Aún no hay trabajos registrados." />}
-        {data.trabajos.length > 0 &&
-          data.trabajos.filter((t) => {
-            if (filtroEstado === "activo") return t.estado !== "cerrado";
-            if (filtroEstado === "cerrado") return t.estado === "cerrado";
-            if (filtroEstado === "personal") return !!t.pagoPersonal;
+        {(() => {
+          const q = busqueda.trim().toLowerCase();
+          const pasaFiltro = (t) => {
+            if (filtroEstado === "activo" && t.estado === "cerrado") return false;
+            if (filtroEstado === "cerrado" && t.estado !== "cerrado") return false;
+            if (filtroEstado === "personal" && !t.pagoPersonal) return false;
+            if (q && !((t.apodo || "").toLowerCase().includes(q) || (t.nombre || "").toLowerCase().includes(q) || (t.cliente || "").toLowerCase().includes(q))) return false;
             return true;
-          }).length === 0 && <Empty text="Ningún trabajo coincide con este filtro." />}
-        {[...data.trabajos]
-          .filter((t) => {
-            if (filtroEstado === "activo") return t.estado !== "cerrado";
-            if (filtroEstado === "cerrado") return t.estado === "cerrado";
-            if (filtroEstado === "personal") return !!t.pagoPersonal;
-            return true;
-          })
-          .sort((a, b) => {
-            if (orden === "abecedario") {
-              return (a.apodo || a.nombre || "").localeCompare(b.apodo || b.nombre || "", "es", { sensitivity: "base" });
-            }
-            // Orden por número: compara como números si ambos tienen número de trabajo (así 2 va antes que 10).
-            // Los que no tienen número asignado se quedan al final, en el orden en que se agregaron.
-            const na = a.numeroTrabajo?.trim();
-            const nb = b.numeroTrabajo?.trim();
-            if (na && nb) {
-              const numA = parseFloat(na.replace(/[^\d.]/g, ""));
-              const numB = parseFloat(nb.replace(/[^\d.]/g, ""));
-              if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
-              return na.localeCompare(nb, "es", { numeric: true, sensitivity: "base" });
-            }
-            if (na && !nb) return -1;
-            if (!na && nb) return 1;
-            return 0;
-          })
-          .map((t, idx) => {
+          };
+          const trabajosFiltrados = data.trabajos.filter(pasaFiltro);
+          if (data.trabajos.length > 0 && trabajosFiltrados.length === 0) {
+            return <Empty text="Ningún trabajo coincide con esta búsqueda o filtro." />;
+          }
+          return [...trabajosFiltrados]
+            .sort((a, b) => {
+              if (orden === "abecedario") {
+                return (a.apodo || a.nombre || "").localeCompare(b.apodo || b.nombre || "", "es", { sensitivity: "base" });
+              }
+              // Orden por número: compara como números si ambos tienen número de trabajo (así 2 va antes que 10).
+              // Los que no tienen número asignado se quedan al final, en el orden en que se agregaron.
+              const na = a.numeroTrabajo?.trim();
+              const nb = b.numeroTrabajo?.trim();
+              if (na && nb) {
+                const numA = parseFloat(na.replace(/[^\d.]/g, ""));
+                const numB = parseFloat(nb.replace(/[^\d.]/g, ""));
+                if (!isNaN(numA) && !isNaN(numB) && numA !== numB) return numA - numB;
+                return na.localeCompare(nb, "es", { numeric: true, sensitivity: "base" });
+              }
+              if (na && !nb) return -1;
+              if (!na && nb) return 1;
+              return 0;
+            })
+            .map((t, idx) => {
           const c = calcTrabajo(t, data);
           const open = openId === t.id;
           return (
@@ -1319,7 +1327,8 @@ function Trabajos({ data, update, onViewPhoto }) {
               )}
             </div>
           );
-        })}
+        });
+        })()}
       </div>
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
