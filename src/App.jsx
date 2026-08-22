@@ -12,25 +12,36 @@ import "leaflet/dist/leaflet.css";
 // Convierte una dirección de texto en coordenadas (lat/lng) usando el servicio gratuito de OpenStreetMap.
 // No requiere llave/API key. Se usa solo la primera vez por trabajo; luego las coordenadas se guardan.
 async function geocodificarDireccion(direccion) {
+  // Intento 1: Censo de EE.UU. — gratis, sin llave, y normalmente más preciso con direcciones de EE.UU.
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(direccion)}`;
-    const res = await fetch(url, { headers: { Accept: "application/json" } });
-    const data = await res.json();
-    if (data && data[0]) {
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    const url1 = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${encodeURIComponent(direccion)}&benchmark=Public_AR_Current&format=json`;
+    const res1 = await fetch(url1);
+    const data1 = await res1.json();
+    const match = data1?.result?.addressMatches?.[0];
+    if (match?.coordinates) {
+      return { lat: parseFloat(match.coordinates.y), lng: parseFloat(match.coordinates.x) };
+    }
+  } catch {}
+  // Intento 2 (respaldo): OpenStreetMap, con sesgo a Estados Unidos
+  try {
+    const url2 = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(direccion)}`;
+    const res2 = await fetch(url2, { headers: { Accept: "application/json" } });
+    const data2 = await res2.json();
+    if (data2 && data2[0]) {
+      return { lat: parseFloat(data2[0].lat), lng: parseFloat(data2[0].lon) };
     }
   } catch {}
   return null;
 }
 
-// Intenta sacar latitud/longitud de un link de Google Maps que la persona pegue
-// (copiado desde la barra de direcciones o al compartir un lugar desde la app de Maps)
+// Intenta sacar latitud/longitud de un link de Google Maps, o de un par de coordenadas pegado directo (ej. "33.749, -84.388")
 function extraerCoordsDeLinkMaps(texto) {
   if (!texto) return null;
   const patrones = [
     /@(-?\d+\.\d+),(-?\d+\.\d+)/,        // .../@33.749,-84.388,17z
     /[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/,   // ?q=33.749,-84.388
     /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,    // formato interno !3d..!4d..
+    /(-?\d{1,3}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})/, // coordenadas sueltas: 33.749, -84.388
   ];
   for (const p of patrones) {
     const m = texto.match(p);
@@ -4107,7 +4118,7 @@ function MapaTrabajosModal({ data, update, onClose }) {
           return (
             <div className="px-3 py-2" style={{ borderBottom: `1px solid ${LINE}`, maxHeight: 220, overflowY: "auto" }}>
               <div className="text-[11px] text-[#7A7263] mb-2">
-                Estos trabajos tienen dirección, pero el mapa no la encontró solo. Busca la dirección en la app de Google Maps, toca "Compartir" → "Copiar link", y pega ese link aquí:
+                Estos trabajos tienen dirección, pero el mapa no la encontró solo. En Google Maps, busca la dirección, <b>mantén el dedo presionado sobre el punto exacto</b> hasta que caiga un pin — arriba te van a salir dos números (las coordenadas). Tócalos para copiarlos, y pégalos aquí:
               </div>
               <div className="space-y-2">
                 {sinUbicar.map((t) => (
@@ -4115,7 +4126,7 @@ function MapaTrabajosModal({ data, update, onClose }) {
                     <span className="text-[11px] flex-1 truncate">{t.apodo || t.nombre}</span>
                     <input
                       className="ledger-input text-xs flex-1"
-                      placeholder="Pega aquí el link de Google Maps"
+                      placeholder="Ej. 33.749, -84.388"
                       value={linkInputs[t.id] || ""}
                       onChange={(e) => setLinkInputs({ ...linkInputs, [t.id]: e.target.value })}
                     />
@@ -4143,7 +4154,7 @@ function MapaTrabajosModal({ data, update, onClose }) {
               </div>
               {Object.values(errorLink).some(Boolean) && (
                 <p className="text-[11px] mt-1" style={{ color: "#A13D2E" }}>
-                  Ese link no lo pude leer — asegúrate de copiarlo desde "Compartir" en Google Maps, no un link acortado.
+                  No pude leer eso — asegúrate de pegar los dos números de coordenadas (o un link completo con @ en el medio).
                 </p>
               )}
             </div>
