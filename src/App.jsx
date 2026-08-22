@@ -3983,6 +3983,7 @@ function MapaTrabajosModal({ data, update, onClose }) {
   const [trabajoAbierto, setTrabajoAbierto] = useState(null);
   const [linkInputs, setLinkInputs] = useState({});
   const [errorLink, setErrorLink] = useState({});
+  const [corrigiendoId, setCorrigiendoId] = useState(null);
 
   const colorEstado = (t) => {
     if (t.estado === "cerrado") return "#3C7A5A"; // verde: concluido
@@ -4169,7 +4170,7 @@ function MapaTrabajosModal({ data, update, onClose }) {
           <div className="p-3" style={{ borderTop: `1px solid ${LINE}` }}>
             <div className="font-medium text-sm mb-0.5">{trabSeleccionado.apodo || trabSeleccionado.nombre}</div>
             <div className="text-[11px] text-[#7A7263] mb-2">{trabSeleccionado.direccion}</div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 mb-2">
               {[
                 { key: "iniciado", label: "Iniciado", color: "#5B7A9D" },
                 { key: "en_proceso", label: "En proceso", color: "#C98A2C" },
@@ -4192,6 +4193,42 @@ function MapaTrabajosModal({ data, update, onClose }) {
                 );
               })}
             </div>
+            {corrigiendoId === trabSeleccionado.id ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  className="ledger-input text-xs flex-1"
+                  placeholder="Pega aquí las coordenadas correctas"
+                  value={linkInputs[trabSeleccionado.id] || ""}
+                  onChange={(e) => setLinkInputs({ ...linkInputs, [trabSeleccionado.id]: e.target.value })}
+                  autoFocus
+                />
+                <button
+                  className="text-[11px] px-2 py-1.5 border shrink-0"
+                  style={{ borderColor: GREEN, color: GREEN }}
+                  onClick={() => {
+                    const coords = extraerCoordsDeLinkMaps(linkInputs[trabSeleccionado.id]);
+                    if (!coords) { setErrorLink({ ...errorLink, [trabSeleccionado.id]: true }); return; }
+                    update((d) => {
+                      const trab = d.trabajos.find((x) => x.id === trabSeleccionado.id);
+                      if (trab) { trab.mapLat = coords.lat; trab.mapLng = coords.lng; }
+                    });
+                    setLinkInputs({ ...linkInputs, [trabSeleccionado.id]: "" });
+                    setErrorLink({ ...errorLink, [trabSeleccionado.id]: false });
+                    setCorrigiendoId(null);
+                  }}
+                >
+                  <Check size={12} />
+                </button>
+                <button className="text-[11px] text-[#7A7263] px-1.5 shrink-0" onClick={() => setCorrigiendoId(null)}>Cancelar</button>
+              </div>
+            ) : (
+              <button className="text-[11px] text-[#7A7263] underline" onClick={() => setCorrigiendoId(trabSeleccionado.id)}>
+                Corregir ubicación en el mapa
+              </button>
+            )}
+            {errorLink[trabSeleccionado.id] && (
+              <p className="text-[11px] mt-1" style={{ color: "#A13D2E" }}>No pude leer esas coordenadas, intenta de nuevo.</p>
+            )}
           </div>
         )}
       </div>
