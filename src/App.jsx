@@ -758,6 +758,7 @@ function Trabajos({ data, update, onViewPhoto }) {
   const [materialesTrabajo, setMaterialesTrabajo] = useState(null);
   const [bitacoraTrabajo, setBitacoraTrabajo] = useState(null);
   const [mostrarPagosPersonales, setMostrarPagosPersonales] = useState(false);
+  const [filtroEstado, setFiltroEstado] = useState("todos");
 
   const addTrabajo = () => {
     if (!form?.nombre) return;
@@ -872,6 +873,16 @@ function Trabajos({ data, update, onViewPhoto }) {
         </div>
       )}
 
+      <div className="card p-3 mb-4">
+        <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Ver trabajos:</label>
+        <select className="ledger-input" value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}>
+          <option value="todos">Todos</option>
+          <option value="activo">Solo activos</option>
+          <option value="cerrado">Solo concluidos</option>
+          <option value="personal">Solo pago personal</option>
+        </select>
+      </div>
+
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[11px] text-[#7A7263] uppercase tracking-wide">Ordenar:</span>
         <button
@@ -900,7 +911,20 @@ function Trabajos({ data, update, onViewPhoto }) {
 
       <div className="space-y-2">
         {data.trabajos.length === 0 && <Empty text="Aún no hay trabajos registrados." />}
+        {data.trabajos.length > 0 &&
+          data.trabajos.filter((t) => {
+            if (filtroEstado === "activo") return t.estado !== "cerrado";
+            if (filtroEstado === "cerrado") return t.estado === "cerrado";
+            if (filtroEstado === "personal") return !!t.pagoPersonal;
+            return true;
+          }).length === 0 && <Empty text="Ningún trabajo coincide con este filtro." />}
         {[...data.trabajos]
+          .filter((t) => {
+            if (filtroEstado === "activo") return t.estado !== "cerrado";
+            if (filtroEstado === "cerrado") return t.estado === "cerrado";
+            if (filtroEstado === "personal") return !!t.pagoPersonal;
+            return true;
+          })
           .sort((a, b) => {
             if (orden === "abecedario") {
               return (a.apodo || a.nombre || "").localeCompare(b.apodo || b.nombre || "", "es", { sensitivity: "base" });
