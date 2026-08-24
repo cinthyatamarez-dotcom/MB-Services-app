@@ -3428,6 +3428,8 @@ function Cuentas({ data, update }) {
   const [transferForm, setTransferForm] = useState(null);
   const [incomeForm, setIncomeForm] = useState(null);
   const [cuentaModal, setCuentaModal] = useState(null);
+  const [editandoIngresoId, setEditandoIngresoId] = useState(null);
+  const [cuentaEditTemp, setCuentaEditTemp] = useState("");
 
   const addCuenta = () => {
     if (!form?.nombre) return;
@@ -3541,11 +3543,20 @@ function Cuentas({ data, update }) {
         const disponible = entrado - gastado;
         return (
           <div className="card p-4 mb-4" style={{ borderColor: AMBER }}>
-            <div className="stamp text-[12px] mb-2" style={{ color: AMBER }}>DINERO DE ANTES DE LA SOCIEDAD</div>
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-[12px]">
-              <span>Entrado: <b className="mono">{money(entrado)}</b></span>
-              <span>Gastado: <b className="mono">{money(gastado)}</b></span>
-              <span>Disponible: <b className="mono" style={{ color: disponible >= 0 ? GREEN : RED }}>{money(disponible)}</b></span>
+            <div className="stamp text-[12px] mb-3" style={{ color: AMBER }}>DINERO DE ANTES DE LA SOCIEDAD</div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Entrado</div>
+                <div className="mono font-medium text-[14px]">{money(entrado)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Gastado</div>
+                <div className="mono font-medium text-[14px]">{money(gastado)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Disponible</div>
+                <div className="mono font-medium text-[14px]" style={{ color: disponible >= 0 ? GREEN : RED }}>{money(disponible)}</div>
+              </div>
             </div>
           </div>
         );
@@ -3596,23 +3607,65 @@ function Cuentas({ data, update }) {
             <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${LINE}` }}>
               {[...data.ingresos].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((ing) => {
                 const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
-                return (
-                  <div key={ing.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
-                    <span>
-                      {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"} · {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
-                      {ing.concepto ? ` · ${ing.concepto}` : ""}
-                      {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
-                      {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
-                      {ing.antesSociedad && (
-                        <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
-                      )}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="mono" style={{ color: GREEN }}>{money(ing.monto)}</span>
-                      <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
-                        <Trash2 size={11} />
+                if (editandoIngresoId === ing.id) {
+                  return (
+                    <div key={ing.id} className="flex items-center gap-1.5 text-[11px] py-1" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                      <span className="text-[#7A7263] shrink-0">{money(ing.monto)} · {fmtDate(ing.fecha)} → cuenta:</span>
+                      <select
+                        className="ledger-input text-xs flex-1"
+                        value={cuentaEditTemp}
+                        onChange={(e) => setCuentaEditTemp(e.target.value)}
+                      >
+                        {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                      </select>
+                      <button
+                        className="text-[11px] px-2 py-1 border shrink-0"
+                        style={{ borderColor: GREEN, color: GREEN }}
+                        onClick={() => {
+                          update((d) => {
+                            const item = d.ingresos.find((x) => x.id === ing.id);
+                            if (item) item.cuentaId = cuentaEditTemp;
+                          });
+                          setEditandoIngresoId(null);
+                        }}
+                      >
+                        <Check size={12} />
                       </button>
-                    </span>
+                      <button className="text-[11px] text-[#7A7263] px-1 shrink-0" onClick={() => setEditandoIngresoId(null)}>Cancelar</button>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={ing.id} className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="text-[12px]">
+                        <div className="font-medium">
+                          {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"}
+                          {ing.antesSociedad && (
+                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-[#7A7263]">
+                          {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
+                          {ing.concepto ? ` · ${ing.concepto}` : ""}
+                          {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
+                          {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="mono font-medium" style={{ color: GREEN }}>{money(ing.monto)}</span>
+                        <button
+                          className="text-[#7A7263]"
+                          title="Cambiar la cuenta de este ingreso"
+                          onClick={() => { setEditandoIngresoId(ing.id); setCuentaEditTemp(ing.cuentaId || ""); }}
+                        >
+                          <PenLine size={11} />
+                        </button>
+                        <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
