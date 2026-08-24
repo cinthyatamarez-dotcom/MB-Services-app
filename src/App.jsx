@@ -470,6 +470,8 @@ function calcTrabajo(t, data) {
   const materialesAportadosPorCliente = materialesCliente.reduce((s, m) => s + materialNeto(m), 0);
   const nominaItems = data.nomina.filter((n) => n.trabajoId === t.id);
   const manoDeObra = nominaItems.reduce((s, n) => s + Number(n.monto), 0);
+  const manoDeObraPagada = nominaItems.filter((n) => n.estado !== "pendiente").reduce((s, n) => s + Number(n.monto), 0);
+  const manoDeObraPendiente = nominaItems.filter((n) => n.estado === "pendiente").reduce((s, n) => s + Number(n.monto), 0);
 
   // Desglose de gastos por quién pagó cada cosa (ej. "Boris · Materiales", "David · Materiales")
   const desgloseMap = {};
@@ -4561,6 +4563,36 @@ function ReciboModal({ trabajo, data, onClose }) {
   const mitadResto = restoARepartir / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
 
+  const F = "'Inter','Helvetica Neue',Arial,sans-serif";
+  const SectionLabel = ({ children }) => (
+    <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8B8577", marginBottom: 6 }}>
+      {children}
+    </div>
+  );
+  const InfoRow = ({ label, value }) =>
+    value ? (
+      <>
+        <span style={{ fontSize: 11, color: "#9A9483" }}>{label}</span>
+        <span style={{ fontSize: 13, color: "#2B2B28" }}>{value}</span>
+      </>
+    ) : null;
+  const LineRow = ({ label, value, bold, muted, border }) => (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "6px 0",
+        fontSize: bold ? 14 : 13,
+        fontWeight: bold ? 600 : 400,
+        color: muted ? "#9A9483" : "#2B2B28",
+        borderTop: border ? "1px solid #E4E0D6" : "none",
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ whiteSpace: "nowrap" }}>{value}</span>
+    </div>
+  );
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
       <div className="bg-white w-full max-w-md my-4">
@@ -4569,228 +4601,183 @@ function ReciboModal({ trabajo, data, onClose }) {
           <button onClick={onClose} className="text-white"><X size={20} /></button>
         </div>
 
-        <div id="recibo-print" className="p-6" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#111" }}>
-          <div className="text-center mb-4">
-            <Receipt size={30} className="mx-auto mb-1" />
-            <div style={{ fontFamily: "'Special Elite', monospace" }} className="text-2xl font-bold uppercase tracking-wide">
-              Reporte de Cierre
+        <div id="recibo-print" style={{ fontFamily: F, color: "#2B2B28", padding: "36px 32px" }}>
+          {/* Encabezado tipo membrete */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 }}>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: "#1E2A38" }}>{data.empresaNombre || "MB Services"}</div>
+              <div style={{ fontSize: 11, color: "#9A9483", marginTop: 2 }}>Reporte de cierre de trabajo</div>
             </div>
-            <div className="text-xs mt-1">{reporte?.fechaCierre ? fmtDate(reporte.fechaCierre) : ""}</div>
+            <div style={{ textAlign: "right", fontSize: 11, color: "#9A9483" }}>
+              {reporte?.fechaCierre ? fmtDate(reporte.fechaCierre) : ""}
+            </div>
           </div>
+          <div style={{ borderTop: "2px solid #1E2A38", marginBottom: 20 }} />
 
-          <div className="recibo-linea" />
-
-          <div className="text-center mb-2">
-            <div className="text-xl font-bold uppercase">{trabajo.nombre}</div>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: "#1E2A38" }}>{trabajo.nombre}</div>
             {trabajo.numeroTrabajo && (
-              <div className="text-sm mt-0.5" style={{ color: "#666" }}>Trabajo #{trabajo.numeroTrabajo}</div>
+              <div style={{ fontSize: 12, color: "#9A9483", marginTop: 2 }}>Trabajo #{trabajo.numeroTrabajo}</div>
             )}
           </div>
 
-          <div className="recibo-linea" />
-
-          <div className="text-sm font-bold uppercase mb-2">Cliente</div>
-          <div className="text-lg font-bold mb-1.5">{trabajo.cliente || "—"}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "3px", columnGap: "10px" }}>
-            {trabajo.managerCliente && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Contacto</span>
-                <span className="text-sm">{trabajo.managerCliente}</span>
-              </>
-            )}
-            {clienteInfo?.telefono && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Teléfono</span>
-                <span className="text-sm">{clienteInfo.telefono}</span>
-              </>
-            )}
-            {clienteInfo?.correo && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Correo</span>
-                <span className="text-sm">{clienteInfo.correo}</span>
-              </>
-            )}
-            {trabajo.direccion && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Dirección</span>
-                <span className="text-sm">{trabajo.direccion}</span>
-              </>
-            )}
-          </div>
-
-          <div className="recibo-linea" />
-
-          <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "5px", columnGap: "10px" }}>
-            {trabajo.descripcionTrabajo &&
-              trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).map((linea, i) => (
-                <React.Fragment key={i}>
-                  <span className="text-xs uppercase" style={{ color: "#888" }}>Trabajo realizado</span>
-                  <span className="text-sm">{linea}</span>
-                </React.Fragment>
-              ))}
-            {trabajo.fecha && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Inicio</span>
-                <span className="text-sm">{fmtDate(trabajo.fecha)}</span>
-              </>
-            )}
-            {trabajo.fechaTerminado && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Finalizado</span>
-                <span className="text-sm">{fmtDate(trabajo.fechaTerminado)}</span>
-              </>
-            )}
-            {trabajo.fecha && trabajo.fechaTerminado && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Duración</span>
-                <span className="text-sm">
-                  {Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s)
-                </span>
-              </>
-            )}
-            {trabajo.diasEstimados && (
-              <>
-                <span className="text-xs uppercase" style={{ color: "#888" }}>Estimado de tiempo</span>
-                <span className="text-sm">{trabajo.diasEstimados} día(s)</span>
-              </>
-            )}
-          </div>
-
-          <div className="recibo-linea" />
-
-          <div className="flex justify-between text-base font-bold py-1">
-            <span>SUBTOTAL MATERIALES</span>
-            <span>{money(c.materiales)}</span>
-          </div>
-
-          <div className="recibo-linea" />
-
-          <div className="text-sm font-bold uppercase mb-2">Mano de obra</div>
-          {nominaT.length === 0 && <div className="text-sm mb-2">— sin registros —</div>}
-          {nominaT.map((n) => (
-            <div key={n.id} className="flex justify-between text-base py-1">
-              <span className="pr-2">{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"}</span>
-              <span className="whitespace-nowrap font-semibold">{money(n.monto)}</span>
+          <div style={{ background: "#F7F5EF", borderRadius: 6, padding: "14px 16px", marginBottom: 20 }}>
+            <SectionLabel>Cliente</SectionLabel>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{trabajo.cliente || "—"}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 4, columnGap: 12 }}>
+              <InfoRow label="Contacto" value={trabajo.managerCliente} />
+              <InfoRow label="Teléfono" value={clienteInfo?.telefono} />
+              <InfoRow label="Correo" value={clienteInfo?.correo} />
+              <InfoRow label="Dirección" value={trabajo.direccion} />
             </div>
-          ))}
-          <div className="flex justify-between text-base font-bold pt-2 border-t border-black mt-1">
-            <span>SUBTOTAL MANO DE OBRA</span>
-            <span>{money(c.manoDeObra)}</span>
           </div>
 
-          <div className="recibo-linea" />
-
-          <div className="flex justify-between text-lg font-bold py-1">
-            <span>ESTIMADO</span>
-            <span>{money(Number(trabajo.estimado))}</span>
-          </div>
-          {c.tienePagoReal && (
-            <>
-              <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
-                <span>TOTAL FINAL PAGADO POR EL CLIENTE</span>
-                <span>{money(Number(trabajo.estimadoPagado))}</span>
-              </div>
-              {c.materialesAportadosPorCliente > 0 && (
-                <div className="flex justify-between text-base py-0.5" style={{ color: "#888" }}>
-                  <span>Menos materiales que compró el cliente directo</span>
-                  <span>{money(c.estimadoPagadoAjustado)}</span>
-                </div>
+          <div style={{ marginBottom: 20 }}>
+            <SectionLabel>Información del trabajo</SectionLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 5, columnGap: 12 }}>
+              {trabajo.descripcionTrabajo &&
+                trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).map((linea, i) => (
+                  <React.Fragment key={i}>
+                    <InfoRow label="Trabajo realizado" value={linea} />
+                  </React.Fragment>
+                ))}
+              <InfoRow label="Inicio" value={trabajo.fecha ? fmtDate(trabajo.fecha) : null} />
+              <InfoRow label="Finalizado" value={trabajo.fechaTerminado ? fmtDate(trabajo.fechaTerminado) : null} />
+              {trabajo.fecha && trabajo.fechaTerminado && (
+                <InfoRow
+                  label="Duración"
+                  value={`${Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s)`}
+                />
               )}
-            </>
-          )}
-          <div className="flex justify-between text-2xl font-bold py-2" style={{ color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
-            <span>GANANCIA {c.tienePagoReal ? "REAL" : "BRUTA"}</span>
-            <span>{money(gananciaParaReparto)}</span>
-          </div>
-          <div className="text-[11px] mb-1" style={{ color: "#888" }}>
-            {c.tienePagoReal ? "Ya considera lo que realmente pagó el cliente. " : ""}Antes de restar los reembolsos pendientes — el reparto real está abajo.
+              <InfoRow label="Estimado de tiempo" value={trabajo.diasEstimados ? `${trabajo.diasEstimados} día(s)` : null} />
+            </div>
           </div>
 
-          <div className="recibo-linea" />
+          <div style={{ marginBottom: 4 }}>
+            <SectionLabel>Materiales</SectionLabel>
+            <LineRow label="Subtotal materiales" value={money(c.materiales)} bold border />
+          </div>
 
-          <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
+          <div style={{ marginBottom: 20, marginTop: 16 }}>
+            <SectionLabel>Mano de obra</SectionLabel>
+            {nominaT.length === 0 && <div style={{ fontSize: 13, color: "#9A9483", padding: "4px 0" }}>Sin registros</div>}
+            {nominaT.map((n) => (
+              <LineRow
+                key={n.id}
+                label={
+                  <>
+                    {data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"}
+                    {n.estado === "pendiente" && (
+                      <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", color: AMBER, marginLeft: 6 }}>Pendiente</span>
+                    )}
+                  </>
+                }
+                value={money(n.monto)}
+              />
+            ))}
+            <LineRow label="Subtotal mano de obra" value={money(c.manoDeObra)} bold border />
+            {c.manoDeObraPendiente > 0 && (
+              <LineRow label="De eso, todavía pendiente de pagar" value={money(c.manoDeObraPendiente)} muted />
+            )}
+          </div>
+
+          <div style={{ marginBottom: 20 }}>
+            <LineRow label="Estimado" value={money(Number(trabajo.estimado))} bold />
+            {c.tienePagoReal && (
+              <>
+                <LineRow label="Total final pagado por el cliente" value={money(Number(trabajo.estimadoPagado))} bold />
+                {c.materialesAportadosPorCliente > 0 && (
+                  <LineRow label="Menos materiales que compró el cliente directo" value={money(c.estimadoPagadoAjustado)} muted />
+                )}
+              </>
+            )}
+          </div>
+
+          <div style={{ background: gananciaParaReparto >= 0 ? "#EAF3E5" : "#FBEAEA", borderRadius: 6, padding: "16px 18px", marginBottom: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+                Ganancia total
+              </span>
+              <span style={{ fontSize: 26, fontWeight: 700, color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+                {money(gananciaParaReparto)}
+              </span>
+            </div>
+            {(nominaT.some((n) => n.estado === "pendiente") || listaReembolsos.length > 0) && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${gananciaParaReparto >= 0 ? "#C9DFC0" : "#EFC7C7"}` }}>
+                {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
+                  <div key={n.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#7A6420", padding: "2px 0" }}>
+                    <span>-{money(n.monto)} mano de obra · {data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"}</span>
+                    <span style={{ fontWeight: 600, textTransform: "uppercase" }}>Pendiente</span>
+                  </div>
+                ))}
+                {listaReembolsos.map((r) => (
+                  <div key={r.nombre} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#7A6420", padding: "2px 0" }}>
+                    <span>-{money(r.total)} {r.materiales > 0 && r.nomina > 0 ? "gastos" : r.materiales > 0 ? "materiales" : "mano de obra"} · {r.nombre}</span>
+                    <span style={{ fontWeight: 600, textTransform: "uppercase" }}>Pendiente</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 8 }}>
+            <SectionLabel>Reparto 50 / 50</SectionLabel>
+          </div>
 
           {totalReembolsosTrabajo > 0 && (
-            <div className="bg-gray-50 px-3 py-2 mb-3" style={{ background: "#F5F3EE" }}>
-              <div className="flex justify-between text-xs py-0.5" style={{ color: "#555" }}>
-                <span>Ganancia del trabajo</span>
-                <span>{money(c.ganancia)}</span>
-              </div>
-              <div className="flex justify-between text-xs py-0.5" style={{ color: "#A13D2E" }}>
-                <span>Reembolsos pendientes</span>
-                <span>-{money(totalReembolsosTrabajo)}</span>
-              </div>
-              <div className="flex justify-between text-sm font-bold py-1 mt-1" style={{ borderTop: "1px solid #999" }}>
-                <span>Resta a repartir</span>
-                <span>{money(restoARepartir)}</span>
-              </div>
+            <div style={{ background: "#F7F5EF", borderRadius: 6, padding: "10px 14px", marginBottom: 12 }}>
+              <LineRow label="Ganancia del trabajo" value={money(c.ganancia)} muted />
+              <LineRow label="Reembolsos pendientes" value={`-${money(totalReembolsosTrabajo)}`} muted />
+              <LineRow label="Resta a repartir" value={money(restoARepartir)} bold border />
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            {data.socios.map((s) => (
-              <div key={s.id} className="text-center py-2 px-1" style={{ background: "#F5F3EE" }}>
-                <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
-                <div className="text-xl font-bold mt-0.5">{money(mitadResto)}</div>
-                <div className="text-[10px] mt-0.5" style={{ color: "#888" }}>ganancia de este trabajo</div>
-              </div>
-            ))}
-          </div>
-
-          {data.socios.some((s) => reembolsoDeSocio(s.id) > 0) && (
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {data.socios.map((s) => {
-                const reembolsoPropio = reembolsoDeSocio(s.id);
-                if (reembolsoPropio <= 0) return <div key={s.id} />;
-                return (
-                  <div key={s.id} className="text-center py-2 px-1" style={{ background: "#FBF3E3", border: "1px solid #E8D9A8" }}>
-                    <div className="text-xs uppercase tracking-wide" style={{ color: "#8A6416" }}>Reembolso a {s.nombre}</div>
-                    <div className="text-lg font-bold mt-0.5" style={{ color: "#8A6416" }}>{money(reembolsoPropio)}</div>
-                    <div className="text-[10px] mt-0.5" style={{ color: "#8A6416" }}>dinero que se le debe, aparte de su ganancia</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {listaReembolsos.length > 0 && (
-            <>
-              <div className="recibo-linea" />
-              <div className="text-sm font-bold uppercase mb-2">Reembolsos pendientes de este trabajo</div>
-              {listaReembolsos.map((r) => (
-                <div key={r.nombre} className="mb-2">
-                  <div className="flex justify-between text-base font-bold">
-                    <span>{r.nombre}</span>
-                    <span className="whitespace-nowrap" style={{ color: "#A13D2E" }}>{money(r.total)}</span>
-                  </div>
-                  {r.materiales > 0 && (
-                    <div className="flex justify-between text-sm pl-3" style={{ color: "#555" }}>
-                      <span>· Materiales</span>
-                      <span>{money(r.materiales)}</span>
-                    </div>
-                  )}
-                  {r.nomina > 0 && (
-                    <div className="flex justify-between text-sm pl-3" style={{ color: "#555" }}>
-                      <span>· Mano de obra</span>
-                      <span>{money(r.nomina)}</span>
-                    </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+            {data.socios.map((s) => {
+              const reembolsoPropio = reembolsoDeSocio(s.id);
+              return (
+                <div key={s.id} style={{ background: "#F7F5EF", borderRadius: 6, padding: "14px 10px", textAlign: "center" }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9A9483" }}>{s.nombre}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{money(mitadResto)}</div>
+                  {reembolsoPropio > 0 && (
+                    <>
+                      <div style={{ fontSize: 11, color: "#7A6420", marginTop: 4 }}>+ {money(reembolsoPropio)} reembolso</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4, paddingTop: 4, borderTop: "1px solid #D8D3C4" }}>
+                        = {money(mitadResto + reembolsoPropio)}
+                      </div>
+                    </>
                   )}
                 </div>
+              );
+            })}
+          </div>
+
+          {listaReembolsos.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <SectionLabel>Reembolsos pendientes de este trabajo</SectionLabel>
+              {listaReembolsos.map((r) => (
+                <div key={r.nombre} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
+                    <span>{r.nombre}</span>
+                    <span style={{ color: "#A13D2E" }}>{money(r.total)}</span>
+                  </div>
+                  {r.materiales > 0 && <LineRow label="Materiales" value={money(r.materiales)} muted />}
+                  {r.nomina > 0 && <LineRow label="Mano de obra" value={money(r.nomina)} muted />}
+                </div>
               ))}
-            </>
+            </div>
           )}
 
           {reporte?.notas && (
-            <>
-              <div className="recibo-linea" />
-              <div className="text-sm font-bold uppercase mb-1">Notas</div>
-              <div className="text-sm whitespace-pre-wrap">{reporte.notas}</div>
-            </>
+            <div style={{ marginBottom: 20 }}>
+              <SectionLabel>Notas</SectionLabel>
+              <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: "#2B2B28" }}>{reporte.notas}</div>
+            </div>
           )}
 
-          <div className="recibo-linea" />
-          <div className="text-center text-[11px] tracking-widest uppercase mt-3">*** Fin del reporte ***</div>
+          <div style={{ borderTop: "1px solid #E4E0D6", marginTop: 12, paddingTop: 12, textAlign: "center", fontSize: 10, color: "#B0AA98" }}>
+            {data.empresaNombre || "MB Services"} · Documento generado el {fmtDate(todayISO())}
+          </div>
         </div>
       </div>
     </div>
