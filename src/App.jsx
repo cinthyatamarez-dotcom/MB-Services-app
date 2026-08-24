@@ -4546,10 +4546,11 @@ function ReciboModal({ trabajo, data, onClose }) {
     if (!p || p === "empresa" || p === "cliente" || p === "sindefinir" || item.reembolsado) return;
     const nombre = pagadorNombre(data, p);
     const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
-    if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0 };
+    if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0, items: [] };
     if (tipo === "Material") reembolsosTrabajo[p].materiales += monto;
     else reembolsosTrabajo[p].nomina += monto;
     reembolsosTrabajo[p].total += monto;
+    reembolsosTrabajo[p].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto });
   };
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
@@ -4621,13 +4622,17 @@ function ReciboModal({ trabajo, data, onClose }) {
           <div className="recibo-linea" />
 
           <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
+          {trabajo.descripcionTrabajo && trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).length > 0 && (
+            <div className="mb-2">
+              <span className="text-xs uppercase" style={{ color: "#888" }}>Trabajo realizado</span>
+              <ul className="text-sm mt-0.5" style={{ paddingLeft: "18px" }}>
+                {trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).map((linea, i) => (
+                  <li key={i}>{linea}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "5px", columnGap: "10px" }}>
-            {trabajo.descripcionTrabajo &&
-              trabajo.descripcionTrabajo.split("\n").filter((linea) => linea.trim()).map((linea, i) => (
-                <React.Fragment key={i}>
-                  <InfoRow label="Trabajo realizado" value={linea} />
-                </React.Fragment>
-              ))}
             <InfoRow label="Inicio" value={trabajo.fecha ? fmtDate(trabajo.fecha) : null} />
             <InfoRow label="Finalizado" value={trabajo.fechaTerminado ? fmtDate(trabajo.fechaTerminado) : null} />
             {trabajo.fecha && trabajo.fechaTerminado && (
@@ -4641,13 +4646,14 @@ function ReciboModal({ trabajo, data, onClose }) {
 
           <div className="recibo-linea" />
 
-          <LineRow label="SUBTOTAL MATERIALES" value={money(c.materiales)} bold />
+          <div className="text-sm font-bold uppercase mb-2">1. Costos del trabajo</div>
 
-          <div className="recibo-linea" />
+          <div className="text-xs font-bold uppercase mb-1" style={{ color: "#888" }}>Materiales</div>
+          <LineRow label="Subtotal materiales" value={money(c.materiales)} bold border />
 
-          <div className="text-sm font-bold uppercase mb-2">Mano de obra</div>
+          <div className="text-xs font-bold uppercase mt-3 mb-1" style={{ color: "#888" }}>Mano de obra</div>
           {nominaT.length === 0 && <div className="text-sm mb-2">— sin registros —</div>}
-          <LineRow label="SUBTOTAL MANO DE OBRA" value={money(c.manoDeObra)} bold border={nominaT.length > 0} />
+          <LineRow label="Subtotal mano de obra" value={money(c.manoDeObra)} bold border={nominaT.length > 0} />
           {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
             <LineRow
               key={n.id}
@@ -4664,7 +4670,9 @@ function ReciboModal({ trabajo, data, onClose }) {
 
           <div className="recibo-linea" />
 
-          <LineRow label="ESTIMADO" value={money(Number(trabajo.estimado))} bold />
+          <div className="text-sm font-bold uppercase mb-2">2. Resumen financiero</div>
+
+          <LineRow label="Estimado" value={money(Number(trabajo.estimado))} bold />
           {c.tienePagoReal && (
             <>
               <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
@@ -4676,26 +4684,30 @@ function ReciboModal({ trabajo, data, onClose }) {
               )}
             </>
           )}
-          <div className="flex justify-between text-2xl font-bold py-2" style={{ color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+          <div className="flex justify-between text-2xl font-bold py-2 mt-1" style={{ borderTop: "1px solid #000", color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
             <span>GANANCIA TOTAL</span>
             <span>{money(gananciaParaReparto)}</span>
           </div>
-          {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
-            <div key={n.id} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
-              <span>-{money(n.monto)} MANO DE OBRA {(data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—").toUpperCase()}</span>
-              <span className="uppercase font-semibold">Pendiente</span>
+          {(nominaT.some((n) => n.estado === "pendiente") || listaReembolsos.length > 0) && (
+            <div className="mb-1">
+              {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
+                <div key={n.id} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
+                  <span>-{money(n.monto)} MANO DE OBRA {(data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—").toUpperCase()}</span>
+                  <span className="uppercase font-semibold">Pendiente</span>
+                </div>
+              ))}
+              {listaReembolsos.map((r) => (
+                <div key={r.nombre} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
+                  <span>-{money(r.total)} {r.materiales > 0 && r.nomina > 0 ? "GASTOS" : r.materiales > 0 ? "MATERIALES" : "MANO DE OBRA"} {r.nombre.toUpperCase()}</span>
+                  <span className="uppercase font-semibold">Pendiente</span>
+                </div>
+              ))}
             </div>
-          ))}
-          {listaReembolsos.map((r) => (
-            <div key={r.nombre} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
-              <span>-{money(r.total)} {r.materiales > 0 && r.nomina > 0 ? "GASTOS" : r.materiales > 0 ? "MATERIALES" : "MANO DE OBRA"} {r.nombre.toUpperCase()}</span>
-              <span className="uppercase font-semibold">Pendiente</span>
-            </div>
-          ))}
+          )}
 
           <div className="recibo-linea" />
 
-          <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
+          <div className="text-sm font-bold uppercase mb-2">3. Reparto entre socios (50 / 50)</div>
 
           {totalReembolsosTrabajo > 0 && (
             <div className="px-3 py-2 mb-3" style={{ background: "#F5F3EE" }}>
@@ -4708,7 +4720,7 @@ function ReciboModal({ trabajo, data, onClose }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2 mb-2">
             {data.socios.map((s) => {
               const reembolsoPropio = reembolsoDeSocio(s.id);
               return (
@@ -4727,20 +4739,28 @@ function ReciboModal({ trabajo, data, onClose }) {
           </div>
 
           {listaReembolsos.length > 0 && (
-            <>
-              <div className="recibo-linea" />
-              <div className="text-sm font-bold uppercase mb-2">Reembolsos pendientes de este trabajo</div>
-              {listaReembolsos.map((r) => (
-                <div key={r.nombre} className="mb-2">
-                  <div className="flex justify-between text-base font-bold">
-                    <span>{r.nombre}</span>
-                    <span className="whitespace-nowrap" style={{ color: "#A13D2E" }}>{money(r.total)}</span>
+            <div className="mt-3">
+              <div className="text-xs font-bold uppercase mb-1" style={{ color: "#888" }}>Detalle de reembolsos pendientes</div>
+              {listaReembolsos.map((r) => {
+                const invoices = [...new Set((r.items || []).filter((it) => it.tipo === "Material" && it.invoice).map((it) => it.invoice))];
+                return (
+                  <div key={r.nombre} className="mb-2">
+                    <div className="flex justify-between text-base font-bold">
+                      <span>{r.nombre}</span>
+                      <span className="whitespace-nowrap" style={{ color: "#A13D2E" }}>{money(r.total)}</span>
+                    </div>
+                    {r.materiales > 0 && (
+                      <LineRow
+                        label={<>· Materiales{invoices.length > 0 && <span style={{ color: "#aaa" }}> (Invoice {invoices.map((i) => `#${i}`).join(", ")})</span>}</>}
+                        value={money(r.materiales)}
+                        muted
+                      />
+                    )}
+                    {r.nomina > 0 && <LineRow label="· Mano de obra" value={money(r.nomina)} muted />}
                   </div>
-                  {r.materiales > 0 && <LineRow label="· Materiales" value={money(r.materiales)} muted />}
-                  {r.nomina > 0 && <LineRow label="· Mano de obra" value={money(r.nomina)} muted />}
-                </div>
-              ))}
-            </>
+                );
+              })}
+            </div>
           )}
 
           {reporte?.notas && (
