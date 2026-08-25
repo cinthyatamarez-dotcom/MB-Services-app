@@ -425,7 +425,7 @@ function FontImport() {
       .btn-primary:hover{background:#12202c}
       .card{background:#fff;border:1px solid ${LINE};position:relative}
       .stamp{font-family:'Special Elite',monospace;letter-spacing:.08em}
-      .recibo-linea{border-bottom:2px dashed #333;margin:10px 0}
+      .recibo-linea{border-bottom:2px dashed #333;margin:20px 0}
       @media print {
         body * { visibility: hidden; }
         #recibo-print, #recibo-print * { visibility: visible; }
@@ -4417,6 +4417,17 @@ function PagosTrabajoModal({ trabajo, data, onClose, tipo }) {
         <span>TOTAL RECIBIDO</span>
         <span>{money(total)}</span>
       </div>
+
+      <div className="recibo-linea" />
+      <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
+      <div className="grid grid-cols-2 gap-2">
+        {data.socios.map((s) => (
+          <div key={s.id} className="text-center py-3 px-2" style={{ background: "#F5F3EE" }}>
+            <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
+            <div className="text-lg font-bold mt-1">{money(total / 2)}</div>
+          </div>
+        ))}
+      </div>
     </HojaImprimible>
   );
 }
@@ -4559,9 +4570,11 @@ function ReciboModal({ trabajo, data, onClose }) {
   // Primero se reembolsa a quien puso dinero de su bolsa, y lo que resta se divide 50/50 entre los socios.
   // Si ya se confirmó cuánto pagó realmente el cliente (estimadoPagado), se usa ese número en vez del estimado completo.
   const gananciaParaReparto = c.tienePagoReal ? c.gananciaReal : c.ganancia;
+  const gananciaBase = c.tienePagoReal ? Number(trabajo.estimadoPagado) : Number(trabajo.estimado);
   const totalReembolsosTrabajo = listaReembolsos.reduce((s, r) => s + r.total, 0);
   const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
   const mitadResto = restoARepartir / 2;
+  const cuotaBase = gananciaParaReparto / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
 
   const F = "'JetBrains Mono','Courier New',monospace";
@@ -4574,8 +4587,8 @@ function ReciboModal({ trabajo, data, onClose }) {
     ) : null;
   const LineRow = ({ label, value, bold, muted, border }) => (
     <div
-      className={`flex justify-between ${bold ? "text-base font-bold" : "text-sm"} py-1`}
-      style={{ color: muted ? "#888" : "#111", borderTop: border ? "1px solid #000" : "none" }}
+      className={`flex justify-between ${bold ? "text-base font-bold" : "text-sm"} py-2`}
+      style={{ color: muted ? "#888" : "#111", borderTop: border ? "1px solid #000" : "none", marginTop: border ? 4 : 0 }}
     >
       <span>{label}</span>
       <span className="whitespace-nowrap">{value}</span>
@@ -4590,7 +4603,7 @@ function ReciboModal({ trabajo, data, onClose }) {
           <button onClick={onClose} className="text-white"><X size={20} /></button>
         </div>
 
-        <div id="recibo-print" className="p-6" style={{ fontFamily: F, color: "#111" }}>
+        <div id="recibo-print" className="p-8" style={{ fontFamily: F, color: "#111", lineHeight: 1.5 }}>
           <div className="text-center mb-4">
             <Receipt size={30} className="mx-auto mb-1" />
             <div style={{ fontFamily: "'Special Elite', monospace" }} className="text-2xl font-bold uppercase tracking-wide">
@@ -4611,12 +4624,9 @@ function ReciboModal({ trabajo, data, onClose }) {
           <div className="recibo-linea" />
 
           <div className="text-sm font-bold uppercase mb-2">Cliente</div>
-          <div className="text-lg font-bold mb-1.5">{trabajo.cliente || "—"}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "3px", columnGap: "10px" }}>
-            <InfoRow label="Contacto" value={trabajo.managerCliente} />
-            <InfoRow label="Teléfono" value={clienteInfo?.telefono} />
-            <InfoRow label="Correo" value={clienteInfo?.correo} />
-            <InfoRow label="Dirección" value={trabajo.direccion} />
+          <div className="text-lg font-bold mb-1">{trabajo.cliente || "—"}</div>
+          <div className="text-sm" style={{ color: "#666" }}>
+            {[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ")}
           </div>
 
           <div className="recibo-linea" />
@@ -4632,136 +4642,103 @@ function ReciboModal({ trabajo, data, onClose }) {
               </ul>
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", rowGap: "5px", columnGap: "10px" }}>
-            <InfoRow label="Inicio" value={trabajo.fecha ? fmtDate(trabajo.fecha) : null} />
-            <InfoRow label="Finalizado" value={trabajo.fechaTerminado ? fmtDate(trabajo.fechaTerminado) : null} />
-            {trabajo.fecha && trabajo.fechaTerminado && (
-              <InfoRow
-                label="Duración"
-                value={`${Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s)`}
-              />
-            )}
-            <InfoRow label="Estimado de tiempo" value={trabajo.diasEstimados ? `${trabajo.diasEstimados} día(s)` : null} />
-          </div>
+          <LineRow
+            label="Fechas"
+            value={
+              trabajo.fecha && trabajo.fechaTerminado
+                ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)} (${Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s))`
+                : trabajo.fecha
+                ? `Inicio ${fmtDate(trabajo.fecha)}${trabajo.diasEstimados ? ` · estimado ${trabajo.diasEstimados} día(s)` : ""}`
+                : "—"
+            }
+          />
 
           <div className="recibo-linea" />
 
-          <div className="text-sm font-bold uppercase mb-2">1. Costos del trabajo</div>
+          <div className="text-base font-bold uppercase mb-3" style={{ letterSpacing: "0.03em" }}>I. Resumen de ingresos (cliente)</div>
+          <LineRow label="Presupuesto inicial (estimado)" value={money(Number(trabajo.estimado))} bold />
+          {c.tienePagoReal && (
+            <>
+              <LineRow label="Total final pagado por el cliente" value={money(Number(trabajo.estimadoPagado))} bold border />
+              {(() => {
+                const dif = Number(trabajo.estimadoPagado) - Number(trabajo.estimado);
+                return (
+                  <div className="flex justify-between text-sm py-0.5" style={{ color: dif >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+                    <span>Diferencia {dif >= 0 ? "a favor" : "a la baja"}</span>
+                    <span>{dif >= 0 ? "+" : ""}{money(dif)}</span>
+                  </div>
+                );
+              })()}
+            </>
+          )}
 
-          <div className="text-xs font-bold uppercase mb-1" style={{ color: "#888" }}>Materiales</div>
-          <LineRow label="Subtotal materiales" value={money(c.materiales)} bold border />
+          <div className="recibo-linea" />
 
-          <div className="text-xs font-bold uppercase mt-3 mb-1" style={{ color: "#888" }}>Mano de obra</div>
-          {nominaT.length === 0 && <div className="text-sm mb-2">— sin registros —</div>}
-          <LineRow label="Subtotal mano de obra" value={money(c.manoDeObra)} bold border={nominaT.length > 0} />
+          <div className="text-base font-bold uppercase mb-3" style={{ letterSpacing: "0.03em" }}>II. Gastos y costos generales de la obra</div>
+          <LineRow label="Materiales de la obra (subtotal) · Egreso directo" value={money(c.materiales)} />
+          <LineRow label="Mano de obra ejecutada (subtotal) · Egreso directo" value={money(c.manoDeObra)} />
+          {c.materialesAportadosPorCliente > 0 && (
+            <LineRow label="Materiales comprados directo por el cliente · Deducción" value={money(c.materialesAportadosPorCliente)} muted />
+          )}
+
+          <div className="recibo-linea" />
+
+          <div className="text-base font-bold uppercase mb-3" style={{ letterSpacing: "0.03em" }}>III. Deudas y retenciones pendientes</div>
+          {nominaT.filter((n) => n.estado === "pendiente").length === 0 && listaReembolsos.length === 0 && (
+            <div className="text-sm" style={{ color: "#888" }}>— sin pendientes —</div>
+          )}
           {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
-            <LineRow
-              key={n.id}
-              label={
-                <>
-                  {data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"}
-                  <span className="text-[10px] uppercase ml-1.5" style={{ color: AMBER }}>Pendiente</span>
-                </>
-              }
-              value={money(n.monto)}
-              muted
-            />
+            <div key={n.id} className="flex justify-between text-sm py-2" style={{ borderBottom: "1px dashed #ccc" }}>
+              <span>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"} <span style={{ color: "#888" }}>· Mano de obra</span></span>
+              <span className="text-right">
+                <span className="uppercase font-semibold" style={{ color: AMBER }}>Pendiente</span>{" "}
+                <span className="whitespace-nowrap">{money(n.monto)}</span>
+              </span>
+            </div>
+          ))}
+          {listaReembolsos.map((r) => (
+            <div key={r.nombre} className="flex justify-between text-sm py-2" style={{ borderBottom: "1px dashed #ccc" }}>
+              <span>{r.nombre} <span style={{ color: "#888" }}>· {r.materiales > 0 && r.nomina > 0 ? "Gastos" : r.materiales > 0 ? "Materiales" : "Mano de obra"} (reembolso)</span></span>
+              <span className="text-right">
+                <span className="uppercase font-semibold" style={{ color: AMBER }}>Pendiente</span>{" "}
+                <span className="whitespace-nowrap">{money(r.total)}</span>
+              </span>
+            </div>
           ))}
 
           <div className="recibo-linea" />
 
-          <div className="text-sm font-bold uppercase mb-2">2. Resumen financiero</div>
+          <div className="text-base font-bold uppercase mb-3" style={{ letterSpacing: "0.03em" }}>IV. Balance final, reembolsos y distribución</div>
 
-          <LineRow label="Estimado" value={money(Number(trabajo.estimado))} bold />
-          {c.tienePagoReal && (
-            <>
-              <div className="flex justify-between text-lg font-bold py-1" style={{ color: AMBER }}>
-                <span>TOTAL FINAL PAGADO POR EL CLIENTE</span>
-                <span>{money(Number(trabajo.estimadoPagado))}</span>
-              </div>
-              {c.materialesAportadosPorCliente > 0 && (
-                <LineRow label="Menos materiales que compró el cliente directo" value={money(c.estimadoPagadoAjustado)} muted />
-              )}
-            </>
+          <LineRow label={c.tienePagoReal ? "Total recibido del cliente" : "Presupuesto (estimado)"} value={money(gananciaBase)} bold />
+          {c.materialesAportadosPorCliente > 0 && (
+            <LineRow label="(−) Menos materiales pagados por cliente" value={`-${money(c.materialesAportadosPorCliente)}`} muted />
           )}
-          <div className="flex justify-between text-2xl font-bold py-2 mt-1" style={{ borderTop: "1px solid #000", color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
-            <span>GANANCIA TOTAL</span>
+          <LineRow label="(−) Menos materiales de la obra" value={`-${money(c.materiales)}`} muted />
+          <LineRow label="(−) Menos mano de obra ejecutada" value={`-${money(c.manoDeObra)}`} muted />
+          <div className="flex justify-between text-xl font-bold py-2 mt-1" style={{ borderTop: "1px solid #000", color: gananciaParaReparto >= 0 ? "#1E6B3E" : "#A13D2E" }}>
+            <span>Ganancia neta total (a repartir)</span>
             <span>{money(gananciaParaReparto)}</span>
           </div>
-          {(nominaT.some((n) => n.estado === "pendiente") || listaReembolsos.length > 0) && (
-            <div className="mb-1">
-              {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
-                <div key={n.id} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
-                  <span>-{money(n.monto)} MANO DE OBRA {(data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—").toUpperCase()}</span>
-                  <span className="uppercase font-semibold">Pendiente</span>
-                </div>
-              ))}
-              {listaReembolsos.map((r) => (
-                <div key={r.nombre} className="flex justify-between text-sm py-0.5" style={{ color: "#8A6416" }}>
-                  <span>-{money(r.total)} {r.materiales > 0 && r.nomina > 0 ? "GASTOS" : r.materiales > 0 ? "MATERIALES" : "MANO DE OBRA"} {r.nombre.toUpperCase()}</span>
-                  <span className="uppercase font-semibold">Pendiente</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <LineRow label={`Cuota base por socio (50% / 50%)`} value={`${money(cuotaBase)} c/u`} muted />
 
           <div className="recibo-linea" />
 
-          <div className="text-sm font-bold uppercase mb-2">3. Reparto entre socios (50 / 50)</div>
-
-          {totalReembolsosTrabajo > 0 && (
-            <div className="px-3 py-2 mb-3" style={{ background: "#F5F3EE" }}>
-              <LineRow label="Ganancia del trabajo" value={money(c.ganancia)} muted />
-              <div className="flex justify-between text-xs py-0.5" style={{ color: "#A13D2E" }}>
-                <span>Reembolsos pendientes</span>
-                <span>-{money(totalReembolsosTrabajo)}</span>
-              </div>
-              <LineRow label="Resta a repartir" value={money(restoARepartir)} bold border />
-            </div>
-          )}
-
+          <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Distribución final de efectivo (a pagar a cada uno)</div>
           <div className="grid grid-cols-2 gap-2 mb-2">
             {data.socios.map((s) => {
               const reembolsoPropio = reembolsoDeSocio(s.id);
               return (
-                <div key={s.id} className="text-center py-2 px-1" style={{ background: "#F5F3EE" }}>
+                <div key={s.id} className="text-center py-4 px-2" style={{ background: "#F5F3EE" }}>
                   <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
-                  <div className="text-lg font-bold mt-0.5">{money(mitadResto)}</div>
-                  {reembolsoPropio > 0 && (
-                    <>
-                      <div className="text-[11px] mt-0.5" style={{ color: "#8A6416" }}>+ {money(reembolsoPropio)} reembolso</div>
-                      <div className="text-base font-bold mt-0.5" style={{ borderTop: "1px solid #999" }}>= {money(mitadResto + reembolsoPropio)}</div>
-                    </>
-                  )}
+                  <div className="text-[10px] mt-1.5" style={{ color: "#888" }}>{reembolsoPropio > 0 ? "Ganancia 50% + Reembolso" : "Ganancia limpia 50%"}</div>
+                  <div className="text-[11px] mt-1" style={{ color: "#666" }}>{money(cuotaBase)}{reembolsoPropio > 0 ? ` + ${money(reembolsoPropio)}` : " + $0.00"}</div>
+                  <div className="text-lg font-bold mt-1.5" style={{ borderTop: "1px solid #999", paddingTop: 6 }}>{money(cuotaBase + reembolsoPropio)}</div>
                 </div>
               );
             })}
           </div>
 
-          {listaReembolsos.length > 0 && (
-            <div className="mt-3">
-              <div className="text-xs font-bold uppercase mb-1" style={{ color: "#888" }}>Detalle de reembolsos pendientes</div>
-              {listaReembolsos.map((r) => {
-                const invoices = [...new Set((r.items || []).filter((it) => it.tipo === "Material" && it.invoice).map((it) => it.invoice))];
-                return (
-                  <div key={r.nombre} className="mb-2">
-                    <div className="flex justify-between text-base font-bold">
-                      <span>{r.nombre}</span>
-                      <span className="whitespace-nowrap" style={{ color: "#A13D2E" }}>{money(r.total)}</span>
-                    </div>
-                    {r.materiales > 0 && (
-                      <LineRow
-                        label={<>· Materiales{invoices.length > 0 && <span style={{ color: "#aaa" }}> (Invoice {invoices.map((i) => `#${i}`).join(", ")})</span>}</>}
-                        value={money(r.materiales)}
-                        muted
-                      />
-                    )}
-                    {r.nomina > 0 && <LineRow label="· Mano de obra" value={money(r.nomina)} muted />}
-                  </div>
-                );
-              })}
-            </div>
-          )}
 
           {reporte?.notas && (
             <>
