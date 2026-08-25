@@ -1393,7 +1393,7 @@ function Trabajos({ data, update, onViewPhoto }) {
       </div>
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
-      {pagosTrabajo && <PagosTrabajoModal trabajo={pagosTrabajo.trabajo} tipo={pagosTrabajo.tipo} data={data} onClose={() => setPagosTrabajo(null)} />}
+      {pagosTrabajo && <PagosTrabajoModal trabajo={pagosTrabajo.trabajo} tipo={pagosTrabajo.tipo} data={data} update={update} onClose={() => setPagosTrabajo(null)} />}
       {mostrarPagosPersonales && <PagosPersonalesModal data={data} onClose={() => setMostrarPagosPersonales(false)} />}
       {mostrarMapa && <MapaTrabajosModal data={data} update={update} onClose={() => setMostrarMapa(false)} />}
     </div>
@@ -3795,6 +3795,7 @@ function Reportes({ data, update }) {
   const [openId, setOpenId] = useState(null);
   const [draftNotas, setDraftNotas] = useState({});
   const [reciboTrabajo, setReciboTrabajo] = useState(null);
+  const [pagosPersonalTrabajo, setPagosPersonalTrabajo] = useState(null);
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
@@ -3803,6 +3804,18 @@ function Reportes({ data, update }) {
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
       return (rb?.fechaCierre || "") < (ra?.fechaCierre || "") ? -1 : 1;
     });
+
+  // Trabajos con al menos un ingreso registrado en una cuenta marcada como personal (CashApp, propinas, etc.)
+  const trabajosConPersonal = data.trabajos
+    .map((t) => {
+      const ingresosPersonales = data.ingresos.filter(
+        (i) => i.trabajoId === t.id && data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal
+      );
+      const total = ingresosPersonales.reduce((s, i) => s + Number(i.monto || 0), 0);
+      return { trabajo: t, total, cantidad: ingresosPersonales.length };
+    })
+    .filter((x) => x.cantidad > 0)
+    .sort((a, b) => (a.trabajo.fecha < b.trabajo.fecha ? 1 : -1));
 
   const guardarNotas = (trabajoId) => {
     update((d) => {
@@ -3819,6 +3832,9 @@ function Reportes({ data, update }) {
         Reportes de cierre
       </SectionTitle>
 
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div>
+          <div className="stamp text-[13px] text-[#7A7263] mb-3">CIERRE EMPRESA</div>
       {trabajosCerrados.length === 0 && (
         <Empty text="Aún no hay trabajos cerrados. Marca un trabajo como 'Cerrado' en la pestaña Trabajos para generar su reporte." />
       )}
@@ -3927,8 +3943,40 @@ function Reportes({ data, update }) {
           );
         })}
       </div>
+        </div>
 
-      {reciboTrabajo && <ReciboModal trabajo={reciboTrabajo} data={data} onClose={() => setReciboTrabajo(null)} />}
+        <div>
+          <div className="stamp text-[13px] mb-3" style={{ color: AMBER }}>CIERRE PERSONAL (CASHAPP / PROPINAS)</div>
+          {trabajosConPersonal.length === 0 && (
+            <Empty text="Aún no hay dinero registrado en cuentas personales (CashApp, propinas) ligado a un trabajo." />
+          )}
+          <div className="space-y-2">
+            {trabajosConPersonal.map(({ trabajo: t, total }) => (
+              <div key={t.id} className="card p-4 flex justify-between items-center">
+                <div>
+                  <div className="font-medium text-sm">{t.apodo || t.nombre}</div>
+                  <div className="text-[12px] text-[#7A7263]">{t.cliente}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="mono text-sm font-semibold" style={{ color: AMBER }}>{money(total)}</span>
+                  <button
+                    className="text-[11px] underline flex items-center gap-1"
+                    style={{ color: "#7A7263" }}
+                    onClick={() => setPagosPersonalTrabajo(t)}
+                  >
+                    <Receipt size={13} /> Ver reporte
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {reciboTrabajo && <ReciboModal trabajo={reciboTrabajo} data={data} update={update} onClose={() => setReciboTrabajo(null)} />}
+      {pagosPersonalTrabajo && (
+        <PagosTrabajoModal trabajo={pagosPersonalTrabajo} tipo="personal" data={data} update={update} onClose={() => setPagosPersonalTrabajo(null)} />
+      )}
     </div>
   );
 }
@@ -4385,11 +4433,34 @@ function PagosPersonalesModal({ data, onClose }) {
   );
 }
 
-function PagosTrabajoModal({ trabajo, data, onClose, tipo }) {
+function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const ingresosTrabajo = data.ingresos.filter((i) => i.trabajoId === trabajo.id);
   const esDeEmpresa = (i) => !data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal;
   const items = ingresosTrabajo.filter((i) => (tipo === "personal" ? !esDeEmpresa(i) : esDeEmpresa(i)));
   const total = items.reduce((s, i) => s + Number(i.monto || 0), 0);
+  const repartoPagado = trabajo.repartoPagado?.[tipo] || {};
+  const [fechaEditando, setFechaEditando] = useState(null);
+  const [fechaTemp, setFechaTemp] = useState("");
+  const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
+  const tareas = (trabajo.descripcionTrabajo || "").split("\n").filter((linea) => linea.trim());
+
+  const marcarPagado = (socioId, fecha) => {
+    update((d) => {
+      const t = d.trabajos.find((x) => x.id === trabajo.id);
+      if (!t.repartoPagado) t.repartoPagado = {};
+      if (!t.repartoPagado[tipo]) t.repartoPagado[tipo] = {};
+      t.repartoPagado[tipo][socioId] = { pagado: true, fecha: fecha || todayISO() };
+    });
+    setFechaEditando(null);
+  };
+  const marcarPendiente = (socioId) => {
+    update((d) => {
+      const t = d.trabajos.find((x) => x.id === trabajo.id);
+      if (!t.repartoPagado) t.repartoPagado = {};
+      if (!t.repartoPagado[tipo]) t.repartoPagado[tipo] = {};
+      t.repartoPagado[tipo][socioId] = { pagado: false, fecha: "" };
+    });
+  };
 
   return (
     <HojaImprimible
@@ -4397,6 +4468,38 @@ function PagosTrabajoModal({ trabajo, data, onClose, tipo }) {
       subtitulo={tipo === "personal" ? "Cuenta personal (ej. CashApp)" : "Cuenta de la empresa"}
       onClose={onClose}
     >
+      <div className="text-sm font-bold uppercase mb-2">Cliente</div>
+      <div className="text-lg font-bold mb-1">{trabajo.cliente || "—"}</div>
+      <div className="text-sm mb-3" style={{ color: "#666" }}>
+        {[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}
+      </div>
+
+      <div className="recibo-linea" />
+
+      <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
+      {tareas.length > 0 && (
+        <div className="mb-2">
+          <span className="text-xs uppercase" style={{ color: "#888" }}>Trabajo realizado</span>
+          <ul className="text-sm mt-0.5" style={{ paddingLeft: "18px" }}>
+            {tareas.map((linea, i) => (
+              <li key={i}>{linea}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <div className="flex justify-between text-sm py-1">
+        <span style={{ color: "#888" }}>Fechas</span>
+        <span>
+          {trabajo.fecha && trabajo.fechaTerminado
+            ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)}`
+            : trabajo.fecha
+            ? `Inicio ${fmtDate(trabajo.fecha)}`
+            : "—"}
+        </span>
+      </div>
+
+      <div className="recibo-linea" />
+
       {items.length === 0 && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
       {items.map((i) => {
         const cuenta = data.cuentas.find((c) => c.id === i.cuentaId);
@@ -4421,12 +4524,55 @@ function PagosTrabajoModal({ trabajo, data, onClose, tipo }) {
       <div className="recibo-linea" />
       <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
       <div className="grid grid-cols-2 gap-2">
-        {data.socios.map((s) => (
-          <div key={s.id} className="text-center py-3 px-2" style={{ background: "#F5F3EE" }}>
-            <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
-            <div className="text-lg font-bold mt-1">{money(total / 2)}</div>
-          </div>
-        ))}
+        {data.socios.map((s) => {
+          const estado = repartoPagado[s.id];
+          const pagado = !!estado?.pagado;
+          return (
+            <div key={s.id} className="text-center py-3 px-2" style={{ background: "#F5F3EE" }}>
+              <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
+              <div className="text-lg font-bold mt-1">{money(total / 2)}</div>
+              <div className="text-[10px] uppercase font-semibold mt-1" style={{ color: pagado ? "#1E6B3E" : "#8A6416" }}>
+                {pagado ? "✓ Pagado" : "Pendiente"}
+              </div>
+              {pagado && estado?.fecha && (
+                <div className="text-[10px] mt-0.5" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>
+              )}
+              {fechaEditando === s.id ? (
+                <div className="no-print mt-1.5 flex flex-col items-center gap-1">
+                  <input
+                    type="date"
+                    className="ledger-input text-[11px] py-1"
+                    value={fechaTemp}
+                    onChange={(e) => setFechaTemp(e.target.value)}
+                  />
+                  <div className="flex gap-1.5">
+                    <button className="text-[10px] underline" style={{ color: GREEN }} onClick={() => marcarPagado(s.id, fechaTemp)}>
+                      Guardar
+                    </button>
+                    <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => setFechaEditando(null)}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  className="no-print text-[10px] underline mt-1"
+                  style={{ color: "#7A7263" }}
+                  onClick={() => {
+                    if (pagado) {
+                      marcarPendiente(s.id);
+                    } else {
+                      setFechaTemp(todayISO());
+                      setFechaEditando(s.id);
+                    }
+                  }}
+                >
+                  Marcar como {pagado ? "pendiente" : "pagado"}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </HojaImprimible>
   );
@@ -4543,7 +4689,7 @@ function formaPagoTextoStandalone(fp, numCheque) {
   return fp === "cheque" && numCheque ? `${base} #${numCheque}` : base;
 }
 
-function ReciboModal({ trabajo, data, onClose }) {
+function ReciboModal({ trabajo, data, update, onClose }) {
   const c = calcTrabajo(trabajo, data);
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
@@ -4576,6 +4722,25 @@ function ReciboModal({ trabajo, data, onClose }) {
   const mitadResto = restoARepartir / 2;
   const cuotaBase = gananciaParaReparto / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
+
+  const repartoCierre = trabajo.repartoPagadoCierre || {};
+  const [fechaEditando, setFechaEditando] = useState(null);
+  const [fechaTemp, setFechaTemp] = useState("");
+  const marcarPagadoCierre = (socioId, fecha) => {
+    update((d) => {
+      const t = d.trabajos.find((x) => x.id === trabajo.id);
+      if (!t.repartoPagadoCierre) t.repartoPagadoCierre = {};
+      t.repartoPagadoCierre[socioId] = { pagado: true, fecha: fecha || todayISO() };
+    });
+    setFechaEditando(null);
+  };
+  const marcarPendienteCierre = (socioId) => {
+    update((d) => {
+      const t = d.trabajos.find((x) => x.id === trabajo.id);
+      if (!t.repartoPagadoCierre) t.repartoPagadoCierre = {};
+      t.repartoPagadoCierre[socioId] = { pagado: false, fecha: "" };
+    });
+  };
 
   const F = "'JetBrains Mono','Courier New',monospace";
   const InfoRow = ({ label, value }) =>
@@ -4728,12 +4893,55 @@ function ReciboModal({ trabajo, data, onClose }) {
           <div className="grid grid-cols-2 gap-2 mb-2">
             {data.socios.map((s) => {
               const reembolsoPropio = reembolsoDeSocio(s.id);
+              const estado = repartoCierre[s.id];
+              const pagado = !!estado?.pagado;
               return (
                 <div key={s.id} className="text-center py-4 px-2" style={{ background: "#F5F3EE" }}>
                   <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
                   <div className="text-[10px] mt-1.5" style={{ color: "#888" }}>{reembolsoPropio > 0 ? "Ganancia 50% + Reembolso" : "Ganancia limpia 50%"}</div>
                   <div className="text-[11px] mt-1" style={{ color: "#666" }}>{money(cuotaBase)}{reembolsoPropio > 0 ? ` + ${money(reembolsoPropio)}` : " + $0.00"}</div>
                   <div className="text-lg font-bold mt-1.5" style={{ borderTop: "1px solid #999", paddingTop: 6 }}>{money(cuotaBase + reembolsoPropio)}</div>
+
+                  <div className="text-[10px] uppercase font-semibold mt-2" style={{ color: pagado ? "#1E6B3E" : "#8A6416" }}>
+                    {pagado ? "✓ Pagado" : "Pendiente"}
+                  </div>
+                  {pagado && estado?.fecha && (
+                    <div className="text-[10px] mt-0.5" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>
+                  )}
+
+                  {fechaEditando === s.id ? (
+                    <div className="no-print mt-1.5 flex flex-col items-center gap-1">
+                      <input
+                        type="date"
+                        className="ledger-input text-[11px] py-1"
+                        value={fechaTemp}
+                        onChange={(e) => setFechaTemp(e.target.value)}
+                      />
+                      <div className="flex gap-1.5">
+                        <button className="text-[10px] underline" style={{ color: GREEN }} onClick={() => marcarPagadoCierre(s.id, fechaTemp)}>
+                          Guardar
+                        </button>
+                        <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => setFechaEditando(null)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="no-print text-[10px] underline mt-1.5"
+                      style={{ color: "#7A7263" }}
+                      onClick={() => {
+                        if (pagado) {
+                          marcarPendienteCierre(s.id);
+                        } else {
+                          setFechaTemp(todayISO());
+                          setFechaEditando(s.id);
+                        }
+                      }}
+                    >
+                      Marcar como {pagado ? "pendiente" : "pagado"}
+                    </button>
+                  )}
                 </div>
               );
             })}
