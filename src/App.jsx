@@ -4534,11 +4534,11 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
 
   return (
     <HojaImprimible
-      titulo={`Pagos recibidos — ${trabajo.apodo || trabajo.nombre}`}
+      titulo={`Pagos recibidos — ${trabajo.apodo || trabajo.nombre}${trabajo.numeroTrabajo ? ` (#${trabajo.numeroTrabajo})` : ""}`}
       subtitulo={tipo === "personal" ? "Cuenta personal (ej. CashApp)" : "Cuenta de la empresa"}
       onClose={onClose}
     >
-      <div className="text-sm font-bold uppercase mb-2">Cliente</div>
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Cliente</div>
       <div className="text-lg font-bold mb-1">{trabajo.cliente || "—"}</div>
       <div className="text-sm mb-3" style={{ color: "#666" }}>
         {[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}
@@ -4546,7 +4546,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
 
       <div className="recibo-linea" />
 
-      <div className="text-sm font-bold uppercase mb-2">Información del trabajo</div>
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Información del trabajo</div>
       {tareas.length > 0 && (
         <div className="mb-2">
           <span className="text-xs uppercase" style={{ color: "#888" }}>Trabajo realizado</span>
@@ -4558,18 +4558,19 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
         </div>
       )}
       <div className="flex justify-between text-sm py-1">
-        <span style={{ color: "#888" }}>Fechas</span>
+        <span style={{ color: "#888" }}>Fecha</span>
         <span>
-          {trabajo.fecha && trabajo.fechaTerminado
+          {trabajo.fecha && trabajo.fechaTerminado && trabajo.fecha !== trabajo.fechaTerminado
             ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)}`
             : trabajo.fecha
-            ? `Inicio ${fmtDate(trabajo.fecha)}`
+            ? fmtDate(trabajo.fecha)
             : "—"}
         </span>
       </div>
 
       <div className="recibo-linea" />
 
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Pagos</div>
       {items.length === 0 && !incluyeTrabajoPersonal && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
       {incluyeTrabajoPersonal && (
         <div className="flex justify-between text-sm py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
