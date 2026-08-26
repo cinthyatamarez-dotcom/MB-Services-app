@@ -3432,6 +3432,8 @@ function Cuentas({ data, update }) {
   const [cuentaModal, setCuentaModal] = useState(null);
   const [editandoIngresoId, setEditandoIngresoId] = useState(null);
   const [cuentaEditTemp, setCuentaEditTemp] = useState("");
+  const [editandoTransferId, setEditandoTransferId] = useState(null);
+  const [transferEditTemp, setTransferEditTemp] = useState({ deCuentaId: "", aCuentaId: "" });
 
   const addCuenta = () => {
     if (!form?.nombre) return;
@@ -3715,6 +3717,41 @@ function Cuentas({ data, update }) {
               {[...data.transferencias].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((tr) => {
                 const de = data.cuentas.find((c) => c.id === tr.deCuentaId);
                 const a = data.cuentas.find((c) => c.id === tr.aCuentaId);
+                if (editandoTransferId === tr.id) {
+                  return (
+                    <div key={tr.id} className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                      <div className="text-[11px] text-[#7A7263] mb-1">{money(tr.monto)} · {fmtDate(tr.fecha)}</div>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-[11px] text-[#7A7263] shrink-0">De:</span>
+                        <select className="ledger-input text-xs flex-1" value={transferEditTemp.deCuentaId} onChange={(e) => setTransferEditTemp({ ...transferEditTemp, deCuentaId: e.target.value })}>
+                          {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-[#7A7263] shrink-0">A:</span>
+                        <select className="ledger-input text-xs flex-1" value={transferEditTemp.aCuentaId} onChange={(e) => setTransferEditTemp({ ...transferEditTemp, aCuentaId: e.target.value })}>
+                          {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex gap-1.5 mt-1.5">
+                        <button
+                          className="text-[11px] px-2 py-1 border"
+                          style={{ borderColor: GREEN, color: GREEN }}
+                          onClick={() => {
+                            update((d) => {
+                              const item = d.transferencias.find((x) => x.id === tr.id);
+                              if (item) { item.deCuentaId = transferEditTemp.deCuentaId; item.aCuentaId = transferEditTemp.aCuentaId; }
+                            });
+                            setEditandoTransferId(null);
+                          }}
+                        >
+                          <Check size={12} />
+                        </button>
+                        <button className="text-[11px] text-[#7A7263] px-1" onClick={() => setEditandoTransferId(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div key={tr.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
                     <span>
@@ -3726,6 +3763,13 @@ function Cuentas({ data, update }) {
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="mono">{money(tr.monto)}</span>
+                      <button
+                        className="text-[#7A7263]"
+                        title="Cambiar las cuentas de esta transferencia"
+                        onClick={() => { setEditandoTransferId(tr.id); setTransferEditTemp({ deCuentaId: tr.deCuentaId || "", aCuentaId: tr.aCuentaId || "" }); }}
+                      >
+                        <PenLine size={11} />
+                      </button>
                       <button className="text-[#A13D2E]" onClick={() => update((d) => { d.transferencias = d.transferencias.filter((x) => x.id !== tr.id); })}>
                         <Trash2 size={11} />
                       </button>
@@ -3811,8 +3855,11 @@ function Reportes({ data, update }) {
       const ingresosPersonales = data.ingresos.filter(
         (i) => i.trabajoId === t.id && data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal
       );
-      const total = ingresosPersonales.reduce((s, i) => s + Number(i.monto || 0), 0);
-      return { trabajo: t, total, cantidad: ingresosPersonales.length };
+      const totalIngresos = ingresosPersonales.reduce((s, i) => s + Number(i.monto || 0), 0);
+      const esTrabajoPersonal = !!t.pagoPersonal;
+      const total = totalIngresos + (esTrabajoPersonal ? Number(t.montoRecibidoPersonal || 0) : 0);
+      const cantidad = ingresosPersonales.length + (esTrabajoPersonal ? 1 : 0);
+      return { trabajo: t, total, cantidad, soloTrabajoPersonal: esTrabajoPersonal && ingresosPersonales.length === 0 };
     })
     .filter((x) => x.cantidad > 0)
     .sort((a, b) => (a.trabajo.fecha < b.trabajo.fecha ? 1 : -1));
@@ -4437,7 +4484,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const ingresosTrabajo = data.ingresos.filter((i) => i.trabajoId === trabajo.id);
   const esDeEmpresa = (i) => !data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal;
   const items = ingresosTrabajo.filter((i) => (tipo === "personal" ? !esDeEmpresa(i) : esDeEmpresa(i)));
-  const total = items.reduce((s, i) => s + Number(i.monto || 0), 0);
+  const incluyeTrabajoPersonal = tipo === "personal" && !!trabajo.pagoPersonal && Number(trabajo.montoRecibidoPersonal || 0) > 0;
+  const total = items.reduce((s, i) => s + Number(i.monto || 0), 0) + (incluyeTrabajoPersonal ? Number(trabajo.montoRecibidoPersonal) : 0);
   const repartoPagado = trabajo.repartoPagado?.[tipo] || {};
   const [fechaEditando, setFechaEditando] = useState(null);
   const [fechaTemp, setFechaTemp] = useState("");
@@ -4500,7 +4548,17 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
 
       <div className="recibo-linea" />
 
-      {items.length === 0 && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
+      {items.length === 0 && !incluyeTrabajoPersonal && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
+      {incluyeTrabajoPersonal && (
+        <div className="flex justify-between text-sm py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
+          <span>
+            {trabajo.fecha ? fmtDate(trabajo.fecha) : "—"} · Pago del trabajo (registrado como personal)
+            {trabajo.formaPagoPersonal ? ` · ${trabajo.formaPagoPersonal === "cheque" ? "Cheque" : trabajo.formaPagoPersonal === "zelle" ? "Zelle" : "Efectivo"}` : ""}
+            {trabajo.numeroChequePersonal ? ` #${trabajo.numeroChequePersonal}` : ""}
+          </span>
+          <span className="whitespace-nowrap font-medium">{money(trabajo.montoRecibidoPersonal)}</span>
+        </div>
+      )}
       {items.map((i) => {
         const cuenta = data.cuentas.find((c) => c.id === i.cuentaId);
         return (
