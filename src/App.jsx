@@ -4513,6 +4513,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const [fechaTemp, setFechaTemp] = useState("");
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
   const tareas = (trabajo.descripcionTrabajo || "").split("\n").filter((linea) => linea.trim());
+  const nombresCuentas = [...new Set(items.map((i) => data.cuentas.find((c) => c.id === i.cuentaId)?.nombre).filter(Boolean))];
+  const subtituloCuenta = nombresCuentas.length > 0 ? nombresCuentas.join(" / ") : tipo === "personal" ? "Cuenta personal" : "Cuenta de la empresa";
 
   const marcarPagado = (socioId, fecha) => {
     update((d) => {
@@ -4535,7 +4537,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   return (
     <HojaImprimible
       titulo={`Pagos recibidos — ${trabajo.apodo || trabajo.nombre}${trabajo.numeroTrabajo ? ` (#${trabajo.numeroTrabajo})` : ""}`}
-      subtitulo={tipo === "personal" ? "Cuenta personal (ej. CashApp)" : "Cuenta de la empresa"}
+      subtitulo={subtituloCuenta}
       onClose={onClose}
     >
       <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Cliente</div>
