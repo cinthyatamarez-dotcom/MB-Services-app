@@ -387,7 +387,7 @@ export default function App() {
         {tab === "bitacora" && <Bitacora data={data} update={update} />}
         {tab === "nomina" && <Nomina data={data} update={update} />}
         {tab === "materiales" && <Materiales data={data} update={update} onViewPhoto={setLightbox} />}
-        {tab === "cuentas" && <Cuentas data={data} update={update} />}
+        {tab === "cuentas" && <Cuentas data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "reembolsos" && <Reembolsos data={data} update={update} />}
         {tab === "reportes" && <Reportes data={data} update={update} />}
       </main>
@@ -3425,7 +3425,7 @@ function GaleriaFacturasModal({ gruposPorTrabajo, onViewPhoto, onClose }) {
 }
 
 /* ---------------- Cuentas ---------------- */
-function Cuentas({ data, update }) {
+function Cuentas({ data, update, onViewPhoto }) {
   const [form, setForm] = useState(null);
   const [transferForm, setTransferForm] = useState(null);
   const [incomeForm, setIncomeForm] = useState(null);
@@ -3456,6 +3456,7 @@ function Cuentas({ data, update }) {
         antesSociedad: !!incomeForm.antesSociedad,
         numeroInvoice: incomeForm.numeroInvoice || "",
         fechaFacturaEnviada: incomeForm.fechaFacturaEnviada || "",
+        fotosInvoice: incomeForm.fotosInvoice || [],
       })
     );
     setIncomeForm(null);
@@ -3597,6 +3598,13 @@ function Cuentas({ data, update }) {
                 <label className="text-[11px] text-[#7A7263] block mb-0.5">Fecha en que se envió la factura/invoice</label>
                 <input className="ledger-input" type="date" value={incomeForm.fechaFacturaEnviada || ""} onChange={(e) => setIncomeForm({ ...incomeForm, fechaFacturaEnviada: e.target.value })} />
               </div>
+              <FotosAntesDespues
+                titulo="Fotos del invoice"
+                fotos={incomeForm.fotosInvoice || []}
+                onAdd={(url) => setIncomeForm((f) => ({ ...f, fotosInvoice: [...(f.fotosInvoice || []), url] }))}
+                onRemove={(idx) => setIncomeForm((f) => ({ ...f, fotosInvoice: (f.fotosInvoice || []).filter((_, i) => i !== idx) }))}
+                onViewPhoto={onViewPhoto}
+              />
               <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
                 <input type="checkbox" checked={!!incomeForm.antesSociedad} onChange={(e) => setIncomeForm({ ...incomeForm, antesSociedad: e.target.checked })} />
                 Es dinero de antes de la sociedad (no mezclar con lo normal)
@@ -3655,6 +3663,20 @@ function Cuentas({ data, update }) {
                           {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
                           {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
                         </div>
+                        {(ing.fotosInvoice?.length > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {ing.fotosInvoice.map((f, idx) => (
+                              <img
+                                key={idx}
+                                src={f}
+                                alt={`Invoice ${idx + 1}`}
+                                className="w-10 h-10 object-cover border cursor-pointer"
+                                style={{ borderColor: LINE }}
+                                onClick={() => onViewPhoto?.(f)}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="mono font-medium" style={{ color: GREEN }}>{money(ing.monto)}</span>
