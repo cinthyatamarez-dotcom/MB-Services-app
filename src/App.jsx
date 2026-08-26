@@ -3465,6 +3465,8 @@ function Cuentas({ data, update, onViewPhoto }) {
         numeroInvoice: incomeForm.numeroInvoice || "",
         fechaFacturaEnviada: incomeForm.fechaFacturaEnviada || "",
         fotosInvoice: incomeForm.fotosInvoice || [],
+        estado: incomeForm.estado === "pendiente" ? "pendiente" : "cobrado",
+        fechaEsperada: incomeForm.estado === "pendiente" ? (incomeForm.fechaEsperada || "") : "",
       })
     );
     setIncomeForm(null);
@@ -3591,7 +3593,40 @@ function Cuentas({ data, update, onViewPhoto }) {
                 {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
               </select>
               <input className="ledger-input" type="number" placeholder="Monto" value={incomeForm.monto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, monto: e.target.value })} />
+              <label className="text-[11px] text-[#7A7263] block mb-0.5">{incomeForm.estado === "pendiente" ? "Fecha en que se registró" : "Fecha en que se recibió"}</label>
               <input className="ledger-input" type="date" value={incomeForm.fecha} onChange={(e) => setIncomeForm({ ...incomeForm, fecha: e.target.value })} />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="text-[11px] px-2.5 py-1.5 border flex-1"
+                  style={{
+                    borderColor: GREEN,
+                    background: (incomeForm.estado || "cobrado") === "cobrado" ? GREEN : "#fff",
+                    color: (incomeForm.estado || "cobrado") === "cobrado" ? "#fff" : GREEN,
+                  }}
+                  onClick={() => setIncomeForm({ ...incomeForm, estado: "cobrado" })}
+                >
+                  Ya se cobró
+                </button>
+                <button
+                  type="button"
+                  className="text-[11px] px-2.5 py-1.5 border flex-1"
+                  style={{
+                    borderColor: AMBER,
+                    background: incomeForm.estado === "pendiente" ? AMBER : "#fff",
+                    color: incomeForm.estado === "pendiente" ? "#fff" : AMBER,
+                  }}
+                  onClick={() => setIncomeForm({ ...incomeForm, estado: "pendiente" })}
+                >
+                  Pendiente de cobro
+                </button>
+              </div>
+              {incomeForm.estado === "pendiente" && (
+                <div>
+                  <label className="text-[11px] text-[#7A7263] block mb-0.5">Fecha esperada de cobro (opcional)</label>
+                  <input className="ledger-input" type="date" value={incomeForm.fechaEsperada || ""} onChange={(e) => setIncomeForm({ ...incomeForm, fechaEsperada: e.target.value })} />
+                </div>
+              )}
               <select className="ledger-input" value={incomeForm.formaPago || "efectivo"} onChange={(e) => setIncomeForm({ ...incomeForm, formaPago: e.target.value })}>
                 <option value="efectivo">Efectivo</option>
                 <option value="cheque">Cheque</option>
@@ -3663,6 +3698,16 @@ function Cuentas({ data, update, onViewPhoto }) {
                           {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"}
                           {ing.antesSociedad && (
                             <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
+                          )}
+                          {ing.estado === "pendiente" && (
+                            <button
+                              className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5"
+                              style={{ background: "#FBE9D9", color: AMBER }}
+                              title="Tocar para marcar como ya cobrado"
+                              onClick={() => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.estado = "cobrado"; })}
+                            >
+                              Pendiente de cobro · tocar cuando se cobre
+                            </button>
                           )}
                         </div>
                         <div className="text-[11px] text-[#7A7263]">
@@ -4163,21 +4208,27 @@ function SociosModal({ data, update, onClose }) {
 
 /* ---------------- Recibo grande, estilo tique de ferretería ---------------- */
 /* ---------------- Hojas imprimibles sencillas (materiales/bitácora por trabajo, movimientos por cuenta) ---------------- */
-function HojaImprimible({ titulo, subtitulo, onClose, children }) {
+function HojaImprimible({ titulo, subtitulo, onClose, children, customHeader, ancho }) {
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-start sm:items-center justify-center p-3 overflow-y-auto">
-      <div className="bg-white w-full max-w-md my-4">
+      <div className={`bg-white w-full my-4 ${ancho === "ancho" ? "max-w-2xl" : "max-w-md"}`}>
         <div className="no-print flex justify-between items-center p-3 bg-[#1E2A38] sticky top-0 z-10">
           <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
           <button onClick={onClose} className="text-white"><X size={20} /></button>
         </div>
-        <div id="recibo-print" className="p-6" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#111" }}>
-          <div className="text-center mb-4">
-            <Receipt size={28} className="mx-auto mb-1" />
-            <div style={{ fontFamily: "'Special Elite', monospace" }} className="text-xl font-bold uppercase tracking-wide">{titulo}</div>
-            {subtitulo && <div className="text-sm mt-1">{subtitulo}</div>}
-          </div>
-          <div className="recibo-linea" />
+        <div id="recibo-print" className={customHeader ? "p-6" : "p-6"} style={{ fontFamily: customHeader ? "Arial, Helvetica, sans-serif" : "'JetBrains Mono', monospace", color: "#111" }}>
+          {customHeader ? (
+            customHeader
+          ) : (
+            <>
+              <div className="text-center mb-4">
+                <Receipt size={28} className="mx-auto mb-1" />
+                <div style={{ fontFamily: "'Special Elite', monospace" }} className="text-xl font-bold uppercase tracking-wide">{titulo}</div>
+                {subtitulo && <div className="text-sm mt-1">{subtitulo}</div>}
+              </div>
+              <div className="recibo-linea" />
+            </>
+          )}
           {children}
         </div>
       </div>
@@ -4528,7 +4579,13 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const esDeEmpresa = (i) => !data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal;
   const items = ingresosTrabajo.filter((i) => (tipo === "personal" ? !esDeEmpresa(i) : esDeEmpresa(i)));
   const incluyeTrabajoPersonal = tipo === "personal" && !!trabajo.pagoPersonal && Number(trabajo.montoRecibidoPersonal || 0) > 0;
-  const total = items.reduce((s, i) => s + Number(i.monto || 0), 0) + (incluyeTrabajoPersonal ? Number(trabajo.montoRecibidoPersonal) : 0);
+
+  const itemsPendientes = items.filter((i) => i.estado === "pendiente");
+  const itemsCobrados = items.filter((i) => i.estado !== "pendiente");
+  const totalCobrado = itemsCobrados.reduce((s, i) => s + Number(i.monto || 0), 0) + (incluyeTrabajoPersonal ? Number(trabajo.montoRecibidoPersonal) : 0);
+  const totalPendienteCobro = itemsPendientes.reduce((s, i) => s + Number(i.monto || 0), 0);
+  const total = totalCobrado + totalPendienteCobro;
+
   const repartoPagado = trabajo.repartoPagado?.[tipo] || {};
   const [fechaEditando, setFechaEditando] = useState(null);
   const [fechaTemp, setFechaTemp] = useState("");
@@ -4536,6 +4593,47 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const tareas = (trabajo.descripcionTrabajo || "").split("\n").filter((linea) => linea.trim());
   const nombresCuentas = [...new Set(items.map((i) => data.cuentas.find((c) => c.id === i.cuentaId)?.nombre).filter(Boolean))];
   const subtituloCuenta = nombresCuentas.length > 0 ? nombresCuentas.join(" / ") : tipo === "personal" ? "Cuenta personal" : "Cuenta de la empresa";
+
+  // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago
+  const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
+  const pagadoConTexto = (n) => {
+    const socio = data.socios.find((s) => s.id === n.pagadoPor);
+    if (socio) return `dinero propio de ${socio.nombre}`;
+    if (n.pagadoPor === "cliente") return "dinero del cliente";
+    if ((n.pagadoPor || "").startsWith("empleado:")) {
+      const emp = data.empleados.find((e) => e.id === n.pagadoPor.slice("empleado:".length));
+      return `dinero propio de ${emp?.nombre || "otro trabajador"}`;
+    }
+    return "fondos del trabajo";
+  };
+  const totalManoDeObra = nominaT.reduce((s, n) => s + Number(n.monto || 0), 0);
+  const manoDeObraPendiente = nominaT.filter((n) => n.estado === "pendiente").reduce((s, n) => s + Number(n.monto || 0), 0);
+
+  // Reembolsos: mano de obra ya pagada, pero con dinero de un socio (no de la empresa/cliente)
+  const reembolsosPorSocio = {};
+  nominaT.forEach((n) => {
+    const socio = data.socios.find((s) => s.id === n.pagadoPor);
+    if (socio && n.estado !== "pendiente" && !n.reembolsado) {
+      reembolsosPorSocio[socio.id] = (reembolsosPorSocio[socio.id] || 0) + Number(n.monto || 0);
+    }
+  });
+  const totalReembolsos = Object.values(reembolsosPorSocio).reduce((s, v) => s + v, 0);
+
+  const gananciaNeta = total - manoDeObraPendiente - totalReembolsos;
+  const cuotaBase = gananciaNeta / 2;
+  const hayPendiente = totalPendienteCobro > 0;
+
+  // Nota explicativa, generada automáticamente según lo que hay pendiente/reembolsable
+  const notas = [];
+  nominaT.forEach((n) => {
+    const empleadoNombre = data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "un trabajador";
+    const socio = data.socios.find((s) => s.id === n.pagadoPor);
+    if (n.estado === "pendiente") {
+      notas.push(`A ${empleadoNombre} todavía no se le ha pagado; se le paga ${hayPendiente ? "apenas se cobre el pago pendiente" : "de los fondos del trabajo"}.`);
+    } else if (socio && !n.reembolsado) {
+      notas.push(`A ${empleadoNombre} ya se le pagó, pero con dinero que ${socio.nombre} puso de su bolsillo, por eso a ${socio.nombre} se le debe reembolsar ${money(n.monto)}.`);
+    }
+  });
 
   const marcarPagado = (socioId, fecha) => {
     update((d) => {
@@ -4555,128 +4653,307 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     });
   };
 
+  const numeroReporte = (trabajo.numeroTrabajo || "").toString().padStart(4, "0") || "—";
+  const metodosPago = [
+    ...(incluyeTrabajoPersonal ? [trabajo.formaPagoPersonal === "cheque" ? "Cheque" : trabajo.formaPagoPersonal === "zelle" ? "Zelle" : "Efectivo"] : []),
+    ...items.map((i) => (i.formaPago === "cheque" ? "Cheque" : i.formaPago === "zelle" ? "Zelle" : "Efectivo")),
+  ];
+  const metodoPagoTexto = [...new Set(metodosPago)].join(" / ") || "—";
+  const Th = ({ children, right }) => (
+    <th className="text-[11px] uppercase font-bold py-1.5" style={{ color: "#888", textAlign: right ? "right" : "left", borderBottom: "1px solid #000" }}>{children}</th>
+  );
+  const Td = ({ children, right, bold }) => (
+    <td className={`text-sm py-1.5 ${bold ? "font-bold" : ""}`} style={{ textAlign: right ? "right" : "left", borderBottom: "1px dashed #ccc" }}>{children}</td>
+  );
+
+  const pillEstilo = (estado) => {
+    if (estado === "pagado") return { background: "#E8F5E9", color: "#2E7D32" };
+    if (estado === "parcial" || estado === "en_espera") return { background: "#FFF3E0", color: "#B26A00" };
+    return { background: "#FDECEA", color: "#C62828" };
+  };
+  const Pill = ({ estado, children }) => (
+    <span className="text-[11px] font-bold px-2.5 py-1" style={{ borderRadius: 3, ...pillEstilo(estado) }}>{children}</span>
+  );
+  const NavyTh = ({ children, right, center }) => (
+    <th
+      className="text-[12px] font-bold py-2 px-2.5"
+      style={{ background: colorPrimario, color: "#fff", textAlign: right ? "right" : center ? "center" : "left" }}
+    >
+      {children}
+    </th>
+  );
+  const NavyTd = ({ children, right, center, bold }) => (
+    <td
+      className={`text-sm py-2 px-2.5 ${bold ? "font-bold" : ""}`}
+      style={{ textAlign: right ? "right" : center ? "center" : "left", borderBottom: "1px solid #D9D9D9" }}
+    >
+      {children}
+    </td>
+  );
+  const estadoGeneral = hayPendiente ? "pendiente" : "pagado";
+  const colorPrimario = tipo === "personal" ? "#1F3864" : "#1B5E20";
+  const colorClaro = tipo === "personal" ? "#DCE6F1" : "#E1F0E3";
+  const estadoGeneralTexto = hayPendiente ? "PENDIENTE — ESPERANDO COBRO DEL CLIENTE" : "PAGADO EN SU TOTALIDAD";
+
   return (
     <HojaImprimible
-      titulo={`Pagos recibidos — ${trabajo.apodo || trabajo.nombre}${trabajo.numeroTrabajo ? ` (#${trabajo.numeroTrabajo})` : ""}`}
-      subtitulo={subtituloCuenta}
+      ancho="ancho"
       onClose={onClose}
-    >
-      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Cliente</div>
-      <div className="text-lg font-bold mb-1">{trabajo.cliente || "—"}</div>
-      <div className="text-sm mb-3" style={{ color: "#666" }}>
-        {[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}
-      </div>
-
-      <div className="recibo-linea" />
-
-      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Información del trabajo</div>
-      {tareas.length > 0 && (
-        <div className="mb-2">
-          <span className="text-xs uppercase" style={{ color: "#888" }}>Trabajo realizado</span>
-          <ul className="text-sm mt-0.5" style={{ paddingLeft: "18px" }}>
-            {tareas.map((linea, i) => (
-              <li key={i}>{linea}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="flex justify-between text-sm py-1">
-        <span style={{ color: "#888" }}>Fecha</span>
-        <span>
-          {trabajo.fecha && trabajo.fechaTerminado && trabajo.fecha !== trabajo.fechaTerminado
-            ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)}`
-            : trabajo.fecha
-            ? fmtDate(trabajo.fecha)
-            : "—"}
-        </span>
-      </div>
-
-      <div className="recibo-linea" />
-
-      <div className="text-xs font-bold uppercase mb-2" style={{ color: "#888" }}>Pagos</div>
-      {items.length === 0 && !incluyeTrabajoPersonal && <div className="text-sm py-2">— sin pagos registrados en esta cuenta —</div>}
-      {incluyeTrabajoPersonal && (
-        <div className="flex justify-between text-sm py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
-          <span>
-            {trabajo.fecha ? fmtDate(trabajo.fecha) : "—"} · Pago del trabajo (registrado como personal)
-            {trabajo.formaPagoPersonal ? ` · ${trabajo.formaPagoPersonal === "cheque" ? "Cheque" : trabajo.formaPagoPersonal === "zelle" ? "Zelle" : "Efectivo"}` : ""}
-            {trabajo.numeroChequePersonal ? ` #${trabajo.numeroChequePersonal}` : ""}
-          </span>
-          <span className="whitespace-nowrap font-medium">{money(trabajo.montoRecibidoPersonal)}</span>
-        </div>
-      )}
-      {items.map((i) => {
-        const cuenta = data.cuentas.find((c) => c.id === i.cuentaId);
-        return (
-          <div key={i.id} className="flex justify-between text-sm py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
-            <span>
-              {fmtDate(i.fecha)} · {cuenta?.nombre || "—"}
-              {i.concepto ? ` · ${i.concepto}` : ""}
-              {i.numeroCheque ? ` · Cheque #${i.numeroCheque}` : ""}
-              {i.numeroInvoice ? ` · Invoice #${i.numeroInvoice}` : ""}
-            </span>
-            <span className="whitespace-nowrap font-medium">{money(i.monto)}</span>
-          </div>
-        );
-      })}
-      <div className="recibo-linea" />
-      <div className="flex justify-between text-lg font-bold">
-        <span>TOTAL RECIBIDO</span>
-        <span>{money(total)}</span>
-      </div>
-
-      <div className="recibo-linea" />
-      <div className="text-sm font-bold uppercase mb-2">Reparto 50 / 50</div>
-      <div className="grid grid-cols-2 gap-2">
-        {data.socios.map((s) => {
-          const estado = repartoPagado[s.id];
-          const pagado = !!estado?.pagado;
-          return (
-            <div key={s.id} className="text-center py-3 px-2" style={{ background: "#F5F3EE" }}>
-              <div className="text-xs uppercase tracking-wide" style={{ color: "#777" }}>{s.nombre}</div>
-              <div className="text-lg font-bold mt-1">{money(total / 2)}</div>
-              <div className="text-[10px] uppercase font-semibold mt-1" style={{ color: pagado ? "#1E6B3E" : "#8A6416" }}>
-                {pagado ? "✓ Pagado" : "Pendiente"}
-              </div>
-              {pagado && estado?.fecha && (
-                <div className="text-[10px] mt-0.5" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>
-              )}
-              {fechaEditando === s.id ? (
-                <div className="no-print mt-1.5 flex flex-col items-center gap-1">
-                  <input
-                    type="date"
-                    className="ledger-input text-[11px] py-1"
-                    value={fechaTemp}
-                    onChange={(e) => setFechaTemp(e.target.value)}
-                  />
-                  <div className="flex gap-1.5">
-                    <button className="text-[10px] underline" style={{ color: GREEN }} onClick={() => marcarPagado(s.id, fechaTemp)}>
-                      Guardar
-                    </button>
-                    <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => setFechaEditando(null)}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  className="no-print text-[10px] underline mt-1"
-                  style={{ color: "#7A7263" }}
-                  onClick={() => {
-                    if (pagado) {
-                      marcarPendiente(s.id);
-                    } else {
-                      setFechaTemp(todayISO());
-                      setFechaEditando(s.id);
-                    }
-                  }}
-                >
-                  Marcar como {pagado ? "pendiente" : "pagado"}
-                </button>
-              )}
+      customHeader={
+        <>
+          <div className="flex justify-between items-start gap-4 mb-2">
+            <div>
+              <div className="text-[22px] font-bold" style={{ color: colorPrimario }}>{(data.empresaNombre || "MB Services").toUpperCase()}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: "#6B6B6B" }}>Construcción y Remodelación</div>
             </div>
-          );
-        })}
+            <div className="text-right px-4 py-3 shrink-0" style={{ background: colorPrimario, color: "#fff", borderRadius: 4, minWidth: 220 }}>
+              <div className="text-[15px] font-bold mb-1.5">REPORTE DE CUENTA {tipo === "personal" ? "PERSONAL" : "EMPRESA"}</div>
+              <div className="text-[10.5px]" style={{ opacity: 0.9 }}>N.º de Reporte: <b>{numeroReporte}</b></div>
+              <div className="text-[10.5px]" style={{ opacity: 0.9 }}>Fecha de emisión: {fmtDate(todayISO())}</div>
+            </div>
+          </div>
+          <hr style={{ border: "none", borderTop: `2px solid ${colorPrimario}`, margin: "12px 0 20px" }} />
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 mb-6" style={{ background: "#F7F9FC", border: "1px solid #D9D9D9", borderRadius: 4 }}>
+        <div className="p-4" style={{ borderRight: "1px solid #D9D9D9" }}>
+          <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Cliente</div>
+          <div className="text-sm"><b>{trabajo.cliente || "—"}</b></div>
+          <div className="text-sm mt-0.5">{[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}</div>
+          <div className="text-[11px] mt-1" style={{ color: "#6B6B6B" }}>Cuenta: {tipo === "personal" ? "Personal" : "Empresa"}</div>
+        </div>
+        <div className="p-4">
+          <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Información del trabajo</div>
+          <div className="text-sm">Fecha: {trabajo.fecha && trabajo.fechaTerminado && trabajo.fecha !== trabajo.fechaTerminado ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)}` : trabajo.fecha ? fmtDate(trabajo.fecha) : "—"}</div>
+          <div className="text-sm mt-0.5">Trabajo realizado: {tareas.length > 0 ? tareas.join(", ") : "—"}</div>
+          <div className="text-[11px] mt-1" style={{ color: "#6B6B6B" }}>Método de pago: {metodoPagoTexto}{hayPendiente ? " (en tránsito)" : ""}</div>
+        </div>
+      </div>
+
+      {(itemsCobrados.length > 0 || incluyeTrabajoPersonal) && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Pagos recibidos</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <NavyTh>Fecha</NavyTh>
+                <NavyTh>Descripción</NavyTh>
+                <NavyTh center>Método</NavyTh>
+                <NavyTh right>Monto</NavyTh>
+              </tr>
+            </thead>
+            <tbody>
+              {incluyeTrabajoPersonal && (
+                <tr>
+                  <NavyTd>{trabajo.fecha ? fmtDate(trabajo.fecha) : "—"}</NavyTd>
+                  <NavyTd>Pago del trabajo{trabajo.numeroChequePersonal ? ` #${trabajo.numeroChequePersonal}` : ""}</NavyTd>
+                  <NavyTd center>{trabajo.formaPagoPersonal === "cheque" ? "Cheque" : trabajo.formaPagoPersonal === "zelle" ? "Zelle" : "Efectivo"}</NavyTd>
+                  <NavyTd right bold>{money(trabajo.montoRecibidoPersonal)}</NavyTd>
+                </tr>
+              )}
+              {itemsCobrados.map((i) => (
+                <tr key={i.id}>
+                  <NavyTd>{fmtDate(i.fecha)}</NavyTd>
+                  <NavyTd>
+                    {i.concepto || "Pago del trabajo"}
+                    {i.numeroCheque ? ` #${i.numeroCheque}` : ""}
+                    {i.numeroInvoice ? ` · Invoice #${i.numeroInvoice}` : ""}
+                  </NavyTd>
+                  <NavyTd center>{formaPagoTexto(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
+                  <NavyTd right bold>{money(i.monto)}</NavyTd>
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={3} className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>TOTAL RECIBIDO</td>
+                <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(totalCobrado)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!hayPendiente && itemsCobrados.length === 0 && !incluyeTrabajoPersonal && (
+        <div className="text-sm py-2 mb-6">— sin pagos registrados en esta cuenta —</div>
+      )}
+
+      {itemsPendientes.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Pago pendiente de cobro</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <NavyTh>Fecha esperada</NavyTh>
+                <NavyTh>Descripción</NavyTh>
+                <NavyTh center>Método</NavyTh>
+                <NavyTh right>Monto</NavyTh>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsPendientes.map((i) => (
+                <tr key={i.id}>
+                  <NavyTd>{i.fechaEsperada ? fmtDate(i.fechaEsperada) : "Por confirmar"}</NavyTd>
+                  <NavyTd>{i.concepto || "Pago del trabajo"}</NavyTd>
+                  <NavyTd center>{formaPagoTexto(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
+                  <NavyTd right bold>{money(i.monto)}</NavyTd>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {nominaT.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Mano de obra / Gastos</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <NavyTh>Trabajador / Socio</NavyTh>
+                <NavyTh>Pagado con</NavyTh>
+                <NavyTh right>Monto</NavyTh>
+                <NavyTh center>Estado</NavyTh>
+                <NavyTh center>Fecha / Condición</NavyTh>
+              </tr>
+            </thead>
+            <tbody>
+              {nominaT.map((n) => {
+                const empleadoNombre = data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—";
+                const pendiente = n.estado === "pendiente";
+                return (
+                  <tr key={n.id}>
+                    <NavyTd>{empleadoNombre}</NavyTd>
+                    <NavyTd>{pendiente ? "—" : pagadoConTexto(n)}</NavyTd>
+                    <NavyTd right bold>{money(n.monto)}</NavyTd>
+                    <NavyTd center><Pill estado={pendiente ? "pendiente" : "pagado"}>{pendiente ? "Pendiente" : "Pagado"}</Pill></NavyTd>
+                    <NavyTd center>{pendiente ? "Al cobrar el pago pendiente" : (n.fecha ? fmtDate(n.fecha) : "—")}</NavyTd>
+                  </tr>
+                );
+              })}
+              <tr>
+                <td colSpan={4} className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>TOTAL MANO DE OBRA / GASTOS</td>
+                <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>{money(totalManoDeObra)}</td>
+              </tr>
+            </tbody>
+          </table>
+          {notas.length > 0 && (
+            <div className="text-[11px] mt-2" style={{ color: "#6B6B6B", lineHeight: 1.5 }}>{notas.join(" ")}</div>
+          )}
+        </div>
+      )}
+
+      <div className="mb-6">
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>
+          {hayPendiente ? "Ganancia neta proyectada a repartir" : "Ganancia neta a repartir"}
+        </div>
+        <table style={{ width: "100%" }}>
+          <tbody>
+            <tr>
+              <td className="text-sm py-1.5 pl-2.5">{hayPendiente ? "Total recibido / a cobrar" : "Total recibido"}</td>
+              <td className="text-sm py-1.5 text-right">{money(total)}</td>
+            </tr>
+            {manoDeObraPendiente > 0 && (
+              <tr>
+                <td className="text-sm py-1.5 pl-2.5">(–) Pago pendiente a trabajadores</td>
+                <td className="text-sm py-1.5 text-right">-{money(manoDeObraPendiente)}</td>
+              </tr>
+            )}
+            {Object.entries(reembolsosPorSocio).map(([socioId, monto]) => (
+              <tr key={socioId}>
+                <td className="text-sm py-1.5 pl-2.5">(–) Reembolso a {data.socios.find((s) => s.id === socioId)?.nombre}</td>
+                <td className="text-sm py-1.5 text-right">-{money(monto)}</td>
+              </tr>
+            ))}
+            <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
+              <td className="text-[14px] font-bold py-2.5 px-2.5" style={{ background: colorClaro, color: colorPrimario }}>
+                GANANCIA NETA (50 / 50)
+              </td>
+              <td className="text-[14px] font-bold py-2.5 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>
+                {money(gananciaNeta)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div className="mb-6">
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Liquidación final por socio</div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <NavyTh>Socio</NavyTh>
+              <NavyTh right>Reembolso</NavyTh>
+              <NavyTh right>50% Ganancia</NavyTh>
+              <NavyTh right>Total a recibir</NavyTh>
+              <NavyTh center>Estado</NavyTh>
+            </tr>
+          </thead>
+          <tbody>
+            {data.socios.map((s) => {
+              const estado = repartoPagado[s.id];
+              const pagado = !!estado?.pagado;
+              const reembolsoPropio = reembolsosPorSocio[s.id] || 0;
+              const totalSocio = cuotaBase + reembolsoPropio;
+              return (
+                <tr key={s.id}>
+                  <NavyTd>{s.nombre}</NavyTd>
+                  <NavyTd right>{money(reembolsoPropio)}</NavyTd>
+                  <NavyTd right>{money(cuotaBase)}</NavyTd>
+                  <NavyTd right bold>{money(totalSocio)}</NavyTd>
+                  <NavyTd center>
+                    <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
+                      {pagado ? "Pagado" : hayPendiente ? "En espera" : "Pendiente"}
+                    </Pill>
+                    {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#6B6B6B" }}>{fmtDate(estado.fecha)}</div>}
+                  </NavyTd>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="no-print flex gap-4 mt-2">
+          {data.socios.map((s) => {
+            const estado = repartoPagado[s.id];
+            const pagado = !!estado?.pagado;
+            return fechaEditando === s.id ? (
+              <div key={s.id} className="flex items-center gap-1.5">
+                <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
+                <button className="text-[10px] underline" style={{ color: "#2E7D32" }} onClick={() => marcarPagado(s.id, fechaTemp)}>Guardar</button>
+                <button className="text-[10px] underline" style={{ color: "#6B6B6B" }} onClick={() => setFechaEditando(null)}>Cancelar</button>
+              </div>
+            ) : (
+              <button
+                key={s.id}
+                className="text-[10px] underline"
+                style={{ color: "#6B6B6B" }}
+                onClick={() => {
+                  if (pagado) marcarPendiente(s.id);
+                  else { setFechaTemp(todayISO()); setFechaEditando(s.id); }
+                }}
+              >
+                {s.nombre}: marcar como {pagado ? "pendiente" : "pagado"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div
+        className="flex items-center gap-2.5 px-4 py-3 mb-6 text-sm"
+        style={{ ...pillEstilo(estadoGeneral), border: `1px solid ${estadoGeneral === "pagado" ? "#2E7D32" : "#C62828"}`, borderRadius: 4 }}
+      >
+        <span>ESTADO GENERAL DEL TRABAJO:</span>
+        <b>{estadoGeneralTexto}</b>
+      </div>
+
+      <div style={{ borderTop: "1px solid #D9D9D9", paddingTop: 10 }}>
+        <div className="text-[9.5px]" style={{ color: "#6B6B6B", lineHeight: 1.5 }}>
+          Este reporte fue generado automáticamente por el sistema de administración de {data.empresaNombre || "MB Services"} · mb-services-app.vercel.app
+          <br />
+          Documento interno — uso exclusivo de los socios.
+          <br />
+          Generado: {fmtDate(todayISO())}, {new Date().toLocaleTimeString("es-US", { hour: "numeric", minute: "2-digit" })}
+        </div>
       </div>
     </HojaImprimible>
   );
