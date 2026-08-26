@@ -1393,7 +1393,15 @@ function Trabajos({ data, update, onViewPhoto }) {
       </div>
       {materialesTrabajo && <MaterialesTrabajoModal trabajo={materialesTrabajo} data={data} onClose={() => setMaterialesTrabajo(null)} />}
       {bitacoraTrabajo && <BitacoraTrabajoModal trabajo={bitacoraTrabajo} data={data} onClose={() => setBitacoraTrabajo(null)} />}
-      {pagosTrabajo && <PagosTrabajoModal trabajo={pagosTrabajo.trabajo} tipo={pagosTrabajo.tipo} data={data} update={update} onClose={() => setPagosTrabajo(null)} />}
+      {pagosTrabajo && (
+        <PagosTrabajoModal
+          trabajo={data.trabajos.find((x) => x.id === pagosTrabajo.trabajo.id) || pagosTrabajo.trabajo}
+          tipo={pagosTrabajo.tipo}
+          data={data}
+          update={update}
+          onClose={() => setPagosTrabajo(null)}
+        />
+      )}
       {mostrarPagosPersonales && <PagosPersonalesModal data={data} onClose={() => setMostrarPagosPersonales(false)} />}
       {mostrarMapa && <MapaTrabajosModal data={data} update={update} onClose={() => setMostrarMapa(false)} />}
     </div>
@@ -4042,9 +4050,22 @@ function Reportes({ data, update }) {
         </div>
       </div>
 
-      {reciboTrabajo && <ReciboModal trabajo={reciboTrabajo} data={data} update={update} onClose={() => setReciboTrabajo(null)} />}
+      {reciboTrabajo && (
+        <ReciboModal
+          trabajo={data.trabajos.find((x) => x.id === reciboTrabajo.id) || reciboTrabajo}
+          data={data}
+          update={update}
+          onClose={() => setReciboTrabajo(null)}
+        />
+      )}
       {pagosPersonalTrabajo && (
-        <PagosTrabajoModal trabajo={pagosPersonalTrabajo} tipo="personal" data={data} update={update} onClose={() => setPagosPersonalTrabajo(null)} />
+        <PagosTrabajoModal
+          trabajo={data.trabajos.find((x) => x.id === pagosPersonalTrabajo.id) || pagosPersonalTrabajo}
+          tipo="personal"
+          data={data}
+          update={update}
+          onClose={() => setPagosPersonalTrabajo(null)}
+        />
       )}
     </div>
   );
