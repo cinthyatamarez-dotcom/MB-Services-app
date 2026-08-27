@@ -3512,6 +3512,13 @@ function Cuentas({ data, update, onViewPhoto }) {
                     )}
                   </div>
                   <div className="text-[11px] text-[#7A7263]">{c.banco}</div>
+                  <button
+                    className="text-[10px] underline mt-0.5"
+                    style={{ color: "#7A7263" }}
+                    onClick={() => update((d) => { const cuenta = d.cuentas.find((x) => x.id === c.id); cuenta.esPersonal = !cuenta.esPersonal; })}
+                  >
+                    Marcar como {c.esPersonal ? "cuenta de la empresa" : "cuenta personal"}
+                  </button>
                 </div>
                 <button className="text-[#A13D2E]" onClick={() => update((d) => { d.cuentas = d.cuentas.filter((x) => x.id !== c.id); })}>
                   <Trash2 size={13} />
@@ -4721,7 +4728,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Cliente</div>
           <div className="text-sm"><b>{trabajo.cliente || "—"}</b></div>
           <div className="text-sm mt-0.5">{[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}</div>
-          <div className="text-[11px] mt-1" style={{ color: "#6B6B6B" }}>Cuenta: {tipo === "personal" ? "Personal" : "Empresa"}</div>
+          <div className="text-[11px] mt-1" style={{ color: "#6B6B6B" }}>
+            Cuenta: {tipo === "personal" ? "Personal" : "Empresa"} ({tipo === "personal" ? "azul" : "verde"} = {tipo === "personal" ? "reporte de cuenta personal" : "reporte oficial de la empresa"})
+          </div>
         </div>
         <div className="p-4">
           <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Información del trabajo</div>
@@ -5174,6 +5183,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Cliente</div>
           <div className="text-sm"><b>{trabajo.cliente || "—"}</b></div>
           <div className="text-sm mt-0.5">{[trabajo.managerCliente, clienteInfo?.telefono, trabajo.direccion].filter(Boolean).join(" · ") || "—"}</div>
+          <div className="text-[11px] mt-1" style={{ color: "#6B6B6B" }}>Cuenta: Empresa (verde = reporte oficial de la empresa)</div>
         </div>
         <div className="p-4">
           <div className="text-[11px] font-bold uppercase mb-1.5" style={{ color: colorPrimario }}>Información del trabajo</div>
