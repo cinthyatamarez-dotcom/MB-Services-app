@@ -4633,10 +4633,14 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const nombresCuentas = [...new Set(items.map((i) => data.cuentas.find((c) => c.id === i.cuentaId)?.nombre).filter(Boolean))];
   const subtituloCuenta = nombresCuentas.length > 0 ? nombresCuentas.join(" / ") : tipo === "personal" ? "Cuenta personal" : "Cuenta de la empresa";
 
-  // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago
-  // Se separa según de qué cuenta salió cada pago — así el dinero personal (propinas/CashApp) y el de la empresa nunca se mezclan.
+  // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago.
+  // Si un socio pagó de su bolsillo (a reembolsar), eso siempre es una deuda de la EMPRESA con ese socio —
+  // sin importar qué cuenta haya elegido solo para anotar de dónde salió el dinero físico.
+  // Solo cuando NO es reembolso a un socio (pagado directo por "empresa"), la cuenta elegida decide si es personal o empresa.
   const nominaT = data.nomina.filter((n) => {
     if (n.trabajoId !== trabajo.id) return false;
+    const esReembolsoASocio = !!data.socios.find((s) => s.id === n.pagadoPor);
+    if (esReembolsoASocio) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
