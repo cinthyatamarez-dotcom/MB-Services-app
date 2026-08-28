@@ -1633,7 +1633,8 @@ function Bitacora({ data, update }) {
         monto: Number(pagoForm.monto),
         pagadoPor: pagoForm.pagadoPor || "empresa",
         cuentaId: pagoForm.cuentaId || "",
-        numeroCheque: pagoForm.numeroCheque || "",
+        formaPago: pagoForm.formaPago || "efectivo",
+        numeroCheque: pagoForm.formaPago === "cheque" ? (pagoForm.numeroCheque || "") : "",
         antesSociedad: !!pagoForm.antesSociedad,
         reembolsado: false,
       });
@@ -1976,7 +1977,14 @@ function Bitacora({ data, update }) {
                             <option value="">Cuenta bancaria…</option>
                             {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
-                          <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={pagoEditForm.numeroCheque || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, numeroCheque: e.target.value })} />
+                          <select className="ledger-input text-xs" value={pagoEditForm.formaPago || "efectivo"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, formaPago: e.target.value })}>
+                            <option value="efectivo">Efectivo</option>
+                            <option value="cheque">Cheque</option>
+                            <option value="zelle">Zelle</option>
+                          </select>
+                          {pagoEditForm.formaPago === "cheque" && (
+                            <input className="ledger-input text-xs" placeholder="Número de cheque" value={pagoEditForm.numeroCheque || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, numeroCheque: e.target.value })} />
+                          )}
                           <div className="flex gap-2">
                             <button
                               className="btn-primary"
@@ -1987,7 +1995,8 @@ function Bitacora({ data, update }) {
                                   p.monto = Number(pagoEditForm.monto);
                                   p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
                                   p.cuentaId = pagoEditForm.cuentaId || "";
-                                  p.numeroCheque = pagoEditForm.numeroCheque || "";
+                                  p.formaPago = pagoEditForm.formaPago || "efectivo";
+                                  p.numeroCheque = pagoEditForm.formaPago === "cheque" ? (pagoEditForm.numeroCheque || "") : "";
                                 });
                                 setPagoEditandoId(null);
                               }}
@@ -2003,7 +2012,7 @@ function Bitacora({ data, update }) {
                       <div key={pago.id} className="flex justify-between items-center text-[11px] text-[#7A7263]">
                         <span>
                           Pago: <b>{money(pago.monto)}</b> a {empleado?.nombre || "—"} · pagado por {pagadorNombre(data, pago.pagadoPor)}
-                          {pago.numeroCheque ? ` · cheque #${pago.numeroCheque}` : ""}
+                          {pago.numeroCheque ? ` · cheque #${pago.numeroCheque}` : pago.formaPago && pago.formaPago !== "efectivo" ? ` · ${pago.formaPago === "zelle" ? "Zelle" : pago.formaPago}` : ""}
                           {pago.reembolsado ? " · reembolsado" : ""}
                           {pago.antesSociedad && (
                             <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
@@ -2014,7 +2023,7 @@ function Bitacora({ data, update }) {
                             className="text-[#7A7263]"
                             title="Editar este pago"
                             onClick={() => {
-                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "", numeroCheque: pago.numeroCheque || "" });
+                              setPagoEditForm({ empleadoId: pago.empleadoId, monto: pago.monto, pagadoPor: pago.pagadoPor || "empresa", cuentaId: pago.cuentaId || "", formaPago: pago.formaPago || (pago.numeroCheque ? "cheque" : "efectivo"), numeroCheque: pago.numeroCheque || "" });
                               setPagoEditandoId(pago.id);
                             }}
                           >
@@ -2057,7 +2066,14 @@ function Bitacora({ data, update }) {
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
-                  <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={pagoForm.numeroCheque || ""} onChange={(e) => setPagoForm({ ...pagoForm, numeroCheque: e.target.value })} />
+                  <select className="ledger-input text-xs" value={pagoForm.formaPago || "efectivo"} onChange={(e) => setPagoForm({ ...pagoForm, formaPago: e.target.value })}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="zelle">Zelle</option>
+                  </select>
+                  {pagoForm.formaPago === "cheque" && (
+                    <input className="ledger-input text-xs" placeholder="Número de cheque" value={pagoForm.numeroCheque || ""} onChange={(e) => setPagoForm({ ...pagoForm, numeroCheque: e.target.value })} />
+                  )}
                   <label className="flex items-center gap-1.5 text-[11px] text-[#7A7263] cursor-pointer">
                     <input type="checkbox" checked={!!pagoForm.antesSociedad} onChange={(e) => setPagoForm({ ...pagoForm, antesSociedad: e.target.checked })} />
                     Pagado con dinero de antes de la sociedad
@@ -2117,7 +2133,8 @@ function Nomina({ data, update }) {
         monto: Number(payForm.monto),
         pagadoPor: payForm.pagadoPor || "empresa",
         cuentaId: payForm.cuentaId || "",
-        numeroCheque: payForm.numeroCheque || "",
+        formaPago: payForm.formaPago || "efectivo",
+        numeroCheque: payForm.formaPago === "cheque" ? (payForm.numeroCheque || "") : "",
         antesSociedad: !!payForm.antesSociedad,
         estado: payForm.estado || "pagado",
         reembolsado: false,
@@ -2285,7 +2302,14 @@ function Nomina({ data, update }) {
                 <option value="">Cuenta bancaria…</option>
                 {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
-              <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={payForm.numeroCheque || ""} onChange={(e) => setPayForm({ ...payForm, numeroCheque: e.target.value })} />
+              <select className="ledger-input" value={payForm.formaPago || "efectivo"} onChange={(e) => setPayForm({ ...payForm, formaPago: e.target.value })}>
+                <option value="efectivo">Efectivo</option>
+                <option value="cheque">Cheque</option>
+                <option value="zelle">Zelle</option>
+              </select>
+              {payForm.formaPago === "cheque" && (
+                <input className="ledger-input" placeholder="Número de cheque" value={payForm.numeroCheque || ""} onChange={(e) => setPayForm({ ...payForm, numeroCheque: e.target.value })} />
+              )}
               <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
                 <input type="checkbox" checked={!!payForm.antesSociedad} onChange={(e) => setPayForm({ ...payForm, antesSociedad: e.target.checked })} />
                 Pagado con dinero de antes de la sociedad
@@ -2356,7 +2380,14 @@ function Nomina({ data, update }) {
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
-                  <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editForm.numeroCheque || ""} onChange={(e) => setEditForm({ ...editForm, numeroCheque: e.target.value })} />
+                  <select className="ledger-input text-xs" value={editForm.formaPago || "efectivo"} onChange={(e) => setEditForm({ ...editForm, formaPago: e.target.value })}>
+                    <option value="efectivo">Efectivo</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="zelle">Zelle</option>
+                  </select>
+                  {editForm.formaPago === "cheque" && (
+                    <input className="ledger-input text-xs" placeholder="Número de cheque" value={editForm.numeroCheque || ""} onChange={(e) => setEditForm({ ...editForm, numeroCheque: e.target.value })} />
+                  )}
                   <div className="flex gap-2">
                     <button
                       className="btn-primary"
@@ -2369,7 +2400,8 @@ function Nomina({ data, update }) {
                           pago.fecha = editForm.fecha;
                           pago.pagadoPor = editForm.pagadoPor || "empresa";
                           pago.cuentaId = editForm.cuentaId || "";
-                          pago.numeroCheque = editForm.numeroCheque || "";
+                          pago.formaPago = editForm.formaPago || "efectivo";
+                          pago.numeroCheque = editForm.formaPago === "cheque" ? (editForm.numeroCheque || "") : "";
                           pago.estado = editForm.estado || "pagado";
                         });
                         setEditandoPagoId(null);
@@ -2385,7 +2417,7 @@ function Nomina({ data, update }) {
                   <div>
                     <div>{emp?.nombre || "—"} <span className="text-[11px] text-[#7A7263]">{trab ? `· ${trab.apodo || trab.nombre}` : ""}</span></div>
                     <div className="text-[11px] text-[#7A7263]">
-                      {fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.numeroCheque ? ` · cheque #${n.numeroCheque}` : ""}{n.reembolsado ? " · reembolsado" : ""}
+                      {fmtDate(n.fecha)} · pagado por {pagadorNombre(data, n.pagadoPor)}{n.numeroCheque ? ` · cheque #${n.numeroCheque}` : n.formaPago && n.formaPago !== "efectivo" ? ` · ${n.formaPago === "zelle" ? "Zelle" : n.formaPago}` : ""}{n.reembolsado ? " · reembolsado" : ""}
                       {n.antesSociedad && (
                         <span className="ml-1 text-[9px] uppercase px-1 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
                       )}
@@ -2411,7 +2443,7 @@ function Nomina({ data, update }) {
                       className="text-[#7A7263]"
                       title="Editar pago"
                       onClick={() => {
-                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "", numeroCheque: n.numeroCheque || "", estado: n.estado || "pagado" });
+                        setEditForm({ empleadoId: n.empleadoId, trabajoId: n.trabajoId || "", monto: n.monto, fecha: n.fecha, pagadoPor: n.pagadoPor || "empresa", cuentaId: n.cuentaId || "", formaPago: n.formaPago || (n.numeroCheque ? "cheque" : "efectivo"), numeroCheque: n.numeroCheque || "", estado: n.estado || "pagado" });
                         setEditandoPagoId(n.id);
                       }}
                     >
@@ -4602,7 +4634,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const subtituloCuenta = nombresCuentas.length > 0 ? nombresCuentas.join(" / ") : tipo === "personal" ? "Cuenta personal" : "Cuenta de la empresa";
 
   // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago
-  const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
+  // Se separa según de qué cuenta salió cada pago — así el dinero personal (propinas/CashApp) y el de la empresa nunca se mezclan.
+  const nominaT = data.nomina.filter((n) => {
+    if (n.trabajoId !== trabajo.id) return false;
+    const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
+    return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
+  });
   const pagadoConTexto = (n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
     if (socio) return `dinero propio de ${socio.nombre}`;
