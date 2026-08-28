@@ -4769,7 +4769,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                     {i.numeroCheque ? ` #${i.numeroCheque}` : ""}
                     {i.numeroInvoice ? ` · Invoice #${i.numeroInvoice}` : ""}
                   </NavyTd>
-                  <NavyTd center>{formaPagoTexto(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
+                  <NavyTd center>{formaPagoTextoStandalone(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
                   <NavyTd right bold>{money(i.monto)}</NavyTd>
                 </tr>
               ))}
@@ -4803,7 +4803,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                 <tr key={i.id}>
                   <NavyTd>{i.fechaEsperada ? fmtDate(i.fechaEsperada) : "Por confirmar"}</NavyTd>
                   <NavyTd>{i.concepto || "Pago del trabajo"}</NavyTd>
-                  <NavyTd center>{formaPagoTexto(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
+                  <NavyTd center>{formaPagoTextoStandalone(i.formaPago, i.numeroCheque).split(" ")[0]}</NavyTd>
                   <NavyTd right bold>{money(i.monto)}</NavyTd>
                 </tr>
               ))}
