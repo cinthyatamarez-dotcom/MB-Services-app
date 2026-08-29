@@ -5151,7 +5151,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const totalReembolsosTrabajo = listaReembolsos.reduce((s, r) => s + r.total, 0);
   const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
   const mitadResto = restoARepartir / 2;
-  const cuotaBase = gananciaParaReparto / 2;
+  const cuotaBase = restoARepartir / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
 
   const repartoCierre = trabajo.repartoPagadoCierre || {};
@@ -5345,9 +5345,25 @@ function ReciboModal({ trabajo, data, update, onClose }) {
             )}
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales de la obra</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materiales)}</td></tr>
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos mano de obra ejecutada</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.manoDeObra)}</td></tr>
+            {data.socios.map((s) => {
+              const reembolsoPropio = reembolsoDeSocio(s.id);
+              if (reembolsoPropio <= 0) return null;
+              return (
+                <tr key={s.id}>
+                  <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>(−) Reembolso pendiente a {s.nombre}</td>
+                  <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(reembolsoPropio)}</td>
+                </tr>
+              );
+            })}
+            {c.manoDeObraPendiente > 0 && (
+              <tr>
+                <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>(−) Mano de obra todavía pendiente de pagar</td>
+                <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(c.manoDeObraPendiente)}</td>
+              </tr>
+            )}
             <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
               <td className="text-[14px] font-bold py-2.5 px-2.5" style={{ background: colorClaro, color: colorPrimario }}>GANANCIA NETA TOTAL (A REPARTIR)</td>
-              <td className="text-[14px] font-bold py-2.5 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(gananciaParaReparto)}</td>
+              <td className="text-[14px] font-bold py-2.5 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(restoARepartir)}</td>
             </tr>
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>Cuota base por socio (50% / 50%)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>{money(cuotaBase)} c/u</td></tr>
           </tbody>
