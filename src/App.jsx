@@ -1633,6 +1633,7 @@ function Bitacora({ data, update }) {
         monto: Number(pagoForm.monto),
         pagadoPor: pagoForm.pagadoPor || "empresa",
         cuentaId: pagoForm.cuentaId || "",
+        esGastoEmpresa: !!pagoForm.esGastoEmpresa,
         formaPago: pagoForm.formaPago || "efectivo",
         numeroCheque: pagoForm.formaPago === "cheque" ? (pagoForm.numeroCheque || "") : "",
         antesSociedad: !!pagoForm.antesSociedad,
@@ -1977,6 +1978,12 @@ function Bitacora({ data, update }) {
                             <option value="">Cuenta bancaria…</option>
                             {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
+                        {!!data.cuentas.find((c) => c.id === pagoEditForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!pagoEditForm.esGastoEmpresa} onChange={(e) => setPagoEditForm({ ...pagoEditForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
                           <select className="ledger-input text-xs" value={pagoEditForm.formaPago || "efectivo"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, formaPago: e.target.value })}>
                             <option value="efectivo">Efectivo</option>
                             <option value="cheque">Cheque</option>
@@ -2066,6 +2073,12 @@ function Bitacora({ data, update }) {
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
+                        {!!data.cuentas.find((c) => c.id === pagoForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!pagoForm.esGastoEmpresa} onChange={(e) => setPagoForm({ ...pagoForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
                   <select className="ledger-input text-xs" value={pagoForm.formaPago || "efectivo"} onChange={(e) => setPagoForm({ ...pagoForm, formaPago: e.target.value })}>
                     <option value="efectivo">Efectivo</option>
                     <option value="cheque">Cheque</option>
@@ -2133,6 +2146,7 @@ function Nomina({ data, update }) {
         monto: Number(payForm.monto),
         pagadoPor: payForm.pagadoPor || "empresa",
         cuentaId: payForm.cuentaId || "",
+        esGastoEmpresa: !!payForm.esGastoEmpresa,
         formaPago: payForm.formaPago || "efectivo",
         numeroCheque: payForm.formaPago === "cheque" ? (payForm.numeroCheque || "") : "",
         antesSociedad: !!payForm.antesSociedad,
@@ -2302,6 +2316,12 @@ function Nomina({ data, update }) {
                 <option value="">Cuenta bancaria…</option>
                 {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
+                        {!!data.cuentas.find((c) => c.id === payForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!payForm.esGastoEmpresa} onChange={(e) => setPayForm({ ...payForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
               <select className="ledger-input" value={payForm.formaPago || "efectivo"} onChange={(e) => setPayForm({ ...payForm, formaPago: e.target.value })}>
                 <option value="efectivo">Efectivo</option>
                 <option value="cheque">Cheque</option>
@@ -2380,6 +2400,12 @@ function Nomina({ data, update }) {
                     <option value="">Cuenta bancaria…</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
+                        {!!data.cuentas.find((c) => c.id === editForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!editForm.esGastoEmpresa} onChange={(e) => setEditForm({ ...editForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
                   <select className="ledger-input text-xs" value={editForm.formaPago || "efectivo"} onChange={(e) => setEditForm({ ...editForm, formaPago: e.target.value })}>
                     <option value="efectivo">Efectivo</option>
                     <option value="cheque">Cheque</option>
@@ -2546,6 +2572,7 @@ function Materiales({ data, update, onViewPhoto }) {
         fecha: form.fecha || todayISO(),
         pagadoPor: pagadoPorFinal,
         cuentaId: form.cuentaId || "",
+        esGastoEmpresa: !!form.esGastoEmpresa,
         numeroCheque: form.numeroCheque || "",
         numeroInvoice: form.numeroInvoice || "",
         reembolsado: false,
@@ -2632,6 +2659,7 @@ function Materiales({ data, update, onViewPhoto }) {
           fecha: scan.fecha || todayISO(),
           pagadoPor: pagadoPorFinal,
           cuentaId: scan.cuentaId || "",
+          esGastoEmpresa: !!scan.esGastoEmpresa,
           reembolsado: false,
           fotos: idx === 0 ? (scan.fotos || []) : [],
           impuestoFactura: idx === 0 ? (Number(scan.impuesto) || 0) : 0,
@@ -2799,10 +2827,18 @@ function Materiales({ data, update, onViewPhoto }) {
               </select>
             )}
             {scan.pagadoPor !== "cliente" && (
+              <>
               <select className="ledger-input" value={scan.cuentaId} onChange={(e) => setScan({ ...scan, cuentaId: e.target.value })}>
                 <option value="">Cuenta bancaria…</option>
                 {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
+                        {!!data.cuentas.find((c) => c.id === scan.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!scan.esGastoEmpresa} onChange={(e) => setScan({ ...scan, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
+              </>
             )}
           </div>
 
@@ -2851,10 +2887,18 @@ function Materiales({ data, update, onViewPhoto }) {
             </select>
           )}
           {form.pagadoPor !== "cliente" && (
+            <>
             <select className="ledger-input" value={form.cuentaId || ""} onChange={(e) => setForm({ ...form, cuentaId: e.target.value })}>
               <option value="">Cuenta bancaria…</option>
               {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
+                        {!!data.cuentas.find((c) => c.id === form.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!form.esGastoEmpresa} onChange={(e) => setForm({ ...form, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
+            </>
           )}
           <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={form.numeroCheque || ""} onChange={(e) => setForm({ ...form, numeroCheque: e.target.value })} />
           <input className="ledger-input" placeholder="Número de invoice (si el recibo trae uno)" value={form.numeroInvoice || ""} onChange={(e) => setForm({ ...form, numeroInvoice: e.target.value })} />
@@ -3030,6 +3074,12 @@ function Materiales({ data, update, onViewPhoto }) {
                           <option value="">Cuenta bancaria…</option>
                           {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
+                        {!!data.cuentas.find((c) => c.id === editMaterialForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!editMaterialForm.esGastoEmpresa} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
                         <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                         <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                         <div className="flex gap-2">
@@ -3173,6 +3223,12 @@ function Materiales({ data, update, onViewPhoto }) {
                             <option value="">Cuenta bancaria…</option>
                             {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                           </select>
+                        {!!data.cuentas.find((c) => c.id === editMaterialForm.cuentaId)?.esPersonal && (
+                          <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                            <input type="checkbox" checked={!!editMaterialForm.esGastoEmpresa} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, esGastoEmpresa: e.target.checked })} />
+                            Este gasto es de la empresa (aunque salió de esta cuenta personal)
+                          </label>
+                        )}
                           <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                           <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                           <div className="flex gap-2">
@@ -4634,18 +4690,21 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const subtituloCuenta = nombresCuentas.length > 0 ? nombresCuentas.join(" / ") : tipo === "personal" ? "Cuenta personal" : "Cuenta de la empresa";
 
   // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago.
-  // Se separa según de qué cuenta elegiste al registrar el pago — tú decides si va al reporte personal o de empresa.
+  // Regla: se separa según la cuenta elegida al registrar el pago, PERO si se marcó "esGastoEmpresa"
+  // (aunque salió de una cuenta personal), va directo al reporte de empresa sin importar la cuenta.
   const nominaT = data.nomina.filter((n) => {
     if (n.trabajoId !== trabajo.id) return false;
+    if (n.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
 
   // Materiales del trabajo, con la misma regla: si lo pagó el cliente directo, no es gasto de la empresa/socios (se excluye).
-  // Se separa según la cuenta elegida al registrar el gasto — igual que la mano de obra.
+  // También respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
     if (m.trabajoId !== trabajo.id) return false;
     if (m.pagadoPor === "cliente") return false;
+    if (m.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === m.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
@@ -4698,12 +4757,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       notas.push(`A ${empleadoNombre} ya se le pagó, pero con dinero que ${socio.nombre} puso de su bolsillo, por eso a ${socio.nombre} se le debe reembolsar ${money(n.monto)}.`);
     }
   });
-  materialesT.forEach((m) => {
-    const socio = data.socios.find((s) => s.id === m.pagadoPor);
-    if (socio && !m.reembolsado) {
-      notas.push(`El material "${m.descripcion}" ya se pagó, pero con dinero que ${socio.nombre} puso de su bolsillo, por eso a ${socio.nombre} se le debe reembolsar ${money(m.monto)}.`);
-    }
-  });
+  // Los materiales ya tienen su propio resumen (total + reembolso) en la tabla de "Materiales" más abajo — no hace falta una nota por cada uno aquí.
 
   const marcarPagado = (socioId, fecha) => {
     update((d) => {
