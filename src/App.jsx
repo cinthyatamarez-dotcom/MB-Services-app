@@ -4644,6 +4644,17 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
+
+  // Materiales del trabajo, con la misma regla: si lo pagó el cliente directo, no es gasto de la empresa/socios (se excluye).
+  // Si lo pagó un socio de su bolsillo, siempre es reembolso de la EMPRESA. Si no, la cuenta decide personal vs empresa.
+  const materialesT = data.materiales.filter((m) => {
+    if (m.trabajoId !== trabajo.id) return false;
+    if (m.pagadoPor === "cliente") return false;
+    const esReembolsoASocio = !!data.socios.find((s) => s.id === m.pagadoPor);
+    if (esReembolsoASocio) return tipo === "empresa";
+    const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === m.cuentaId)?.esPersonal;
+    return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
+  });
   const pagadoConTexto = (n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
     if (socio) return `dinero propio de ${socio.nombre}`;
@@ -4656,8 +4667,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   };
   const totalManoDeObra = nominaT.reduce((s, n) => s + Number(n.monto || 0), 0);
   const manoDeObraPendiente = nominaT.filter((n) => n.estado === "pendiente").reduce((s, n) => s + Number(n.monto || 0), 0);
+  const totalMateriales = materialesT.reduce((s, m) => s + Number(m.monto || 0), 0);
 
-  // Reembolsos: mano de obra ya pagada, pero con dinero de un socio (no de la empresa/cliente)
+  // Reembolsos: mano de obra o materiales ya pagados, pero con dinero de un socio (no de la empresa/cliente)
   const reembolsosPorSocio = {};
   nominaT.forEach((n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
@@ -4665,9 +4677,19 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       reembolsosPorSocio[socio.id] = (reembolsosPorSocio[socio.id] || 0) + Number(n.monto || 0);
     }
   });
+  materialesT.forEach((m) => {
+    const socio = data.socios.find((s) => s.id === m.pagadoPor);
+    if (socio && !m.reembolsado) {
+      reembolsosPorSocio[socio.id] = (reembolsosPorSocio[socio.id] || 0) + Number(m.monto || 0);
+    }
+  });
   const totalReembolsos = Object.values(reembolsosPorSocio).reduce((s, v) => s + v, 0);
 
-  const gananciaNeta = total - manoDeObraPendiente - totalReembolsos;
+  // Materiales pagados directo por la empresa (no por un socio) — esos sí reducen la ganancia directamente.
+  // Los pagados por un socio ya están contados dentro de totalReembolsos, así que no se restan aparte (para no restarlos dos veces).
+  const materialesPagadosPorEmpresa = materialesT.filter((m) => !data.socios.find((s) => s.id === m.pagadoPor)).reduce((s, m) => s + Number(m.monto || 0), 0);
+
+  const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos;
   const cuotaBase = gananciaNeta / 2;
   const hayPendiente = totalPendienteCobro > 0;
 
@@ -4680,6 +4702,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       notas.push(`A ${empleadoNombre} todavía no se le ha pagado; se le paga ${hayPendiente ? "apenas se cobre el pago pendiente" : "de los fondos del trabajo"}.`);
     } else if (socio && !n.reembolsado) {
       notas.push(`A ${empleadoNombre} ya se le pagó, pero con dinero que ${socio.nombre} puso de su bolsillo, por eso a ${socio.nombre} se le debe reembolsar ${money(n.monto)}.`);
+    }
+  });
+  materialesT.forEach((m) => {
+    const socio = data.socios.find((s) => s.id === m.pagadoPor);
+    if (socio && !m.reembolsado) {
+      notas.push(`El material "${m.descripcion}" ya se pagó, pero con dinero que ${socio.nombre} puso de su bolsillo, por eso a ${socio.nombre} se le debe reembolsar ${money(m.monto)}.`);
     }
   });
 
@@ -4892,6 +4920,37 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
         </div>
       )}
 
+      {materialesT.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Materiales</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <NavyTh>Descripción</NavyTh>
+                <NavyTh>Pagado con</NavyTh>
+                <NavyTh right>Monto</NavyTh>
+                <NavyTh center>Fecha</NavyTh>
+              </tr>
+            </thead>
+            <tbody>
+              {materialesT.map((m) => (
+                <tr key={m.id}>
+                  <NavyTd>{m.descripcion}</NavyTd>
+                  <NavyTd>{pagadoConTexto(m)}</NavyTd>
+                  <NavyTd right bold>{money(m.monto)}</NavyTd>
+                  <NavyTd center>{m.fecha ? fmtDate(m.fecha) : "—"}</NavyTd>
+                </tr>
+              ))}
+              <tr>
+                <td colSpan={2} className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>TOTAL MATERIALES</td>
+                <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>{money(totalMateriales)}</td>
+                <td style={{ background: "#FFF3E0" }}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="mb-6">
         <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>
           {hayPendiente ? "Ganancia neta proyectada a repartir" : "Ganancia neta a repartir"}
@@ -4906,6 +4965,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               <tr>
                 <td className="text-sm py-1.5 pl-2.5">(–) Pago pendiente a trabajadores</td>
                 <td className="text-sm py-1.5 text-right">-{money(manoDeObraPendiente)}</td>
+              </tr>
+            )}
+            {materialesPagadosPorEmpresa > 0 && (
+              <tr>
+                <td className="text-sm py-1.5 pl-2.5">(–) Materiales</td>
+                <td className="text-sm py-1.5 text-right">-{money(materialesPagadosPorEmpresa)}</td>
               </tr>
             )}
             {Object.entries(reembolsosPorSocio).map(([socioId, monto]) => (
