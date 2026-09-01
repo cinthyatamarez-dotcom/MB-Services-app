@@ -83,7 +83,7 @@ const money = (n) =>
 const fmtDate = (iso) => {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+  return `${m}/${d}/${y}`;
 };
 
 // Comprime la foto de la factura antes de guardarla (para que quepa en el almacenamiento)
@@ -5355,10 +5355,18 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                 </tr>
               );
             })}
+            {totalReembolsosTrabajo > 0 && (
+              <tr>
+                <td className="text-[11px] py-1" style={{ color: "#B26A00" }} colSpan={2}>
+                  (Esto no es un gasto nuevo — es la parte de arriba que {data.socios.filter((s) => reembolsoDeSocio(s.id) > 0).map((s) => s.nombre).join(" y ")} pagó de su bolsillo, y que se le regresa completa en vez de repartirla)
+                </td>
+              </tr>
+            )}
             {c.manoDeObraPendiente > 0 && (
               <tr>
-                <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>(−) Mano de obra todavía pendiente de pagar</td>
-                <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(c.manoDeObraPendiente)}</td>
+                <td className="text-[11px] py-1" style={{ color: "#B26A00" }} colSpan={2}>
+                  (De esos ${c.manoDeObraPendiente.toFixed(2)} de mano de obra, todavía no se han pagado — ya están incluidos arriba, no se restan doble)
+                </td>
               </tr>
             )}
             <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
