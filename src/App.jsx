@@ -4917,29 +4917,24 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       {materialesT.length > 0 && (
         <div className="mb-6">
           <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Materiales</div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <NavyTh>Descripción</NavyTh>
-                <NavyTh>Pagado con</NavyTh>
-                <NavyTh right>Monto</NavyTh>
-                <NavyTh center>Fecha</NavyTh>
-              </tr>
-            </thead>
+          <table style={{ width: "100%" }}>
             <tbody>
-              {materialesT.map((m) => (
-                <tr key={m.id}>
-                  <NavyTd>{m.descripcion}</NavyTd>
-                  <NavyTd>{pagadoConTexto(m)}</NavyTd>
-                  <NavyTd right bold>{money(m.monto)}</NavyTd>
-                  <NavyTd center>{m.fecha ? fmtDate(m.fecha) : "—"}</NavyTd>
-                </tr>
-              ))}
               <tr>
-                <td colSpan={2} className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>TOTAL MATERIALES</td>
-                <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: "#FFF3E0", color: "#B26A00" }}>{money(totalMateriales)}</td>
-                <td style={{ background: "#FFF3E0" }}></td>
+                <td className="text-sm py-1.5">Costo total de materiales</td>
+                <td className="text-sm py-1.5 text-right font-bold">{money(totalMateriales)}</td>
               </tr>
+              {data.socios.map((s) => {
+                const reembolsoMaterialesSocio = materialesT
+                  .filter((m) => m.pagadoPor === s.id && !m.reembolsado)
+                  .reduce((sum, m) => sum + Number(m.monto || 0), 0);
+                if (reembolsoMaterialesSocio <= 0) return null;
+                return (
+                  <tr key={s.id}>
+                    <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>Se le debe reembolsar a {s.nombre}</td>
+                    <td className="text-sm py-1.5 text-right font-bold" style={{ color: "#B26A00" }}>{money(reembolsoMaterialesSocio)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
