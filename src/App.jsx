@@ -2002,6 +2002,7 @@ function Bitacora({ data, update }) {
                                   p.monto = Number(pagoEditForm.monto);
                                   p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
                                   p.cuentaId = pagoEditForm.cuentaId || "";
+                                  p.esGastoEmpresa = !!pagoEditForm.esGastoEmpresa;
                                   p.formaPago = pagoEditForm.formaPago || "efectivo";
                                   p.numeroCheque = pagoEditForm.formaPago === "cheque" ? (pagoEditForm.numeroCheque || "") : "";
                                 });
@@ -2426,6 +2427,7 @@ function Nomina({ data, update }) {
                           pago.fecha = editForm.fecha;
                           pago.pagadoPor = editForm.pagadoPor || "empresa";
                           pago.cuentaId = editForm.cuentaId || "";
+                          pago.esGastoEmpresa = !!editForm.esGastoEmpresa;
                           pago.formaPago = editForm.formaPago || "efectivo";
                           pago.numeroCheque = editForm.formaPago === "cheque" ? (editForm.numeroCheque || "") : "";
                           pago.estado = editForm.estado || "pagado";
@@ -3091,6 +3093,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                 item.trabajoId = editMaterialForm.trabajoId || "";
                                 item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                 item.cuentaId = editMaterialForm.cuentaId || "";
+                                item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
                                 item.numeroCheque = editMaterialForm.numeroCheque || "";
                                 item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                               });
@@ -3240,6 +3243,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                   item.trabajoId = editMaterialForm.trabajoId || "";
                                   item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                   item.cuentaId = editMaterialForm.cuentaId || "";
+                                  item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
                                   item.numeroCheque = editMaterialForm.numeroCheque || "";
                                   item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                                 });
