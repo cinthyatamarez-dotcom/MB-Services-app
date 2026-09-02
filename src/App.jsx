@@ -515,13 +515,18 @@ function calcTrabajo(t, data) {
   // Ganancia final que de verdad se reparte entre los socios: usa el pago real si ya se confirmó,
   // y siempre resta lo que se le debe reembolsar a quien puso dinero de su bolsa en este trabajo.
   const gananciaParaReparto = tienePagoReal ? gananciaReal : ganancia;
-  const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
+  // OJO: gananciaParaReparto (= total − materiales − manoDeObra, usando los TOTALES completos, sin importar quién pagó)
+  // YA tiene descontado lo que pagaron los socios de su bolsillo — por eso NO se le vuelve a restar el reembolso aquí.
+  // El reembolso se le SUMA aparte a quien puso el dinero (ver reembolsoDeSocio), no se resta del total a repartir.
+  const restoARepartir = gananciaParaReparto;
   const mitadResto = restoARepartir / 2;
   return {
     materiales,
     materialesAportadosPorCliente,
     estimadoAjustado,
     manoDeObra,
+    manoDeObraPagada,
+    manoDeObraPendiente,
     desglose,
     reembolsoPorPersona,
     totalReembolsosTrabajo,
@@ -1073,9 +1078,9 @@ function Trabajos({ data, update, onViewPhoto }) {
                     />
                   </div>
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
-                  {c.desglose.length > 0 && (
+                  {c.desglose.filter((d) => d.tipoLabel === "Materiales").length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
-                      {c.desglose.map((d, i) => (
+                      {c.desglose.filter((d) => d.tipoLabel === "Materiales").map((d, i) => (
                         <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
                           <span>{d.nombre} · {d.tipoLabel}</span>
                           <span className="mono">{money(d.monto)}</span>
@@ -1084,6 +1089,16 @@ function Trabajos({ data, update, onViewPhoto }) {
                     </div>
                   )}
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
+                  {c.desglose.filter((d) => d.tipoLabel === "Nómina").length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.desglose.filter((d) => d.tipoLabel === "Nómina").map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
+                          <span>{d.nombre} · {d.tipoLabel}</span>
+                          <span className="mono">{money(d.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {c.materialesAportadosPorCliente > 0 && (
                     <>
                       <Row label="Materiales que compró el cliente directo" value={money(c.materialesAportadosPorCliente)} />
@@ -1124,7 +1139,7 @@ function Trabajos({ data, update, onViewPhoto }) {
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
                         <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
-                        <div className="text-[9px] text-[#7A7263]">ganancia (ya restado reembolso)</div>
+                        <div className="text-[9px] text-[#7A7263]">mitad de la ganancia (50/50)</div>
                       </div>
                     ))}
                   </div>
@@ -2575,6 +2590,7 @@ function Materiales({ data, update, onViewPhoto }) {
         pagadoPor: pagadoPorFinal,
         cuentaId: form.cuentaId || "",
         esGastoEmpresa: !!form.esGastoEmpresa,
+        antesSociedad: !!form.antesSociedad,
         numeroCheque: form.numeroCheque || "",
         numeroInvoice: form.numeroInvoice || "",
         reembolsado: false,
@@ -2662,6 +2678,7 @@ function Materiales({ data, update, onViewPhoto }) {
           pagadoPor: pagadoPorFinal,
           cuentaId: scan.cuentaId || "",
           esGastoEmpresa: !!scan.esGastoEmpresa,
+          antesSociedad: !!scan.antesSociedad,
           reembolsado: false,
           fotos: idx === 0 ? (scan.fotos || []) : [],
           impuestoFactura: idx === 0 ? (Number(scan.impuesto) || 0) : 0,
@@ -2840,6 +2857,10 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
+                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                          <input type="checkbox" checked={!!scan.antesSociedad} onChange={(e) => setScan({ ...scan, antesSociedad: e.target.checked })} />
+                          Este gasto salió de dinero de antes de la sociedad
+                        </label>
               </>
             )}
           </div>
@@ -2900,6 +2921,10 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
+                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                          <input type="checkbox" checked={!!form.antesSociedad} onChange={(e) => setForm({ ...form, antesSociedad: e.target.checked })} />
+                          Este gasto salió de dinero de antes de la sociedad
+                        </label>
             </>
           )}
           <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={form.numeroCheque || ""} onChange={(e) => setForm({ ...form, numeroCheque: e.target.value })} />
@@ -3082,6 +3107,10 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
+                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                          <input type="checkbox" checked={!!editMaterialForm.antesSociedad} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, antesSociedad: e.target.checked })} />
+                          Este gasto salió de dinero de antes de la sociedad
+                        </label>
                         <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                         <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                         <div className="flex gap-2">
@@ -3094,6 +3123,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                 item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                 item.cuentaId = editMaterialForm.cuentaId || "";
                                 item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
+                                item.antesSociedad = !!editMaterialForm.antesSociedad;
                                 item.numeroCheque = editMaterialForm.numeroCheque || "";
                                 item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                               });
@@ -3232,6 +3262,10 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
+                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
+                          <input type="checkbox" checked={!!editMaterialForm.antesSociedad} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, antesSociedad: e.target.checked })} />
+                          Este gasto salió de dinero de antes de la sociedad
+                        </label>
                           <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                           <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                           <div className="flex gap-2">
@@ -3244,6 +3278,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                   item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
                                   item.cuentaId = editMaterialForm.cuentaId || "";
                                   item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
+                                item.antesSociedad = !!editMaterialForm.antesSociedad;
                                   item.numeroCheque = editMaterialForm.numeroCheque || "";
                                   item.numeroInvoice = editMaterialForm.numeroInvoice || "";
                                 });
@@ -3649,29 +3684,37 @@ function Cuentas({ data, update, onViewPhoto }) {
       )}
 
       {(() => {
+        const RESERVA_MINIMA_ANTES_SOCIEDAD = 5000;
+        // Una sola bolsa global: entra cuando marcas un INGRESO como "antes de la sociedad" (sin importar la cuenta),
+        // y sale SOLO cuando marcas una TRANSFERENCIA como "antes de la sociedad" (un retiro real de ese dinero, sin importar a qué cuenta se mueva).
+        // Pagar nómina o materiales desde cualquier cuenta NO afecta este número — eso se reembolsa aparte.
         const entrado = data.ingresos.filter((i) => i.antesSociedad).reduce((s, i) => s + Number(i.monto || 0), 0);
-        const gastado =
-          data.nomina.filter((n) => n.antesSociedad).reduce((s, n) => s + Number(n.monto || 0), 0) +
-          data.transferencias.filter((t) => t.antesSociedad).reduce((s, t) => s + Number(t.monto || 0), 0);
-        if (entrado === 0 && gastado === 0) return null;
+        const gastado = data.transferencias.filter((t) => t.antesSociedad).reduce((s, t) => s + Number(t.monto || 0), 0);
         const disponible = entrado - gastado;
+        if (entrado === 0 && gastado === 0) return null;
+        const bajoReserva = disponible < RESERVA_MINIMA_ANTES_SOCIEDAD;
         return (
-          <div className="card p-4 mb-4" style={{ borderColor: AMBER }}>
-            <div className="stamp text-[12px] mb-3" style={{ color: AMBER }}>DINERO DE ANTES DE LA SOCIEDAD</div>
+          <div className="card p-4 mb-4" style={{ borderColor: bajoReserva ? RED : AMBER }}>
+            <div className="stamp text-[12px] mb-3" style={{ color: bajoReserva ? RED : AMBER }}>DINERO DE ANTES DE LA SOCIEDAD</div>
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
-                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Entrado</div>
+                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Había</div>
                 <div className="mono font-medium text-[14px]">{money(entrado)}</div>
               </div>
               <div>
-                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Gastado</div>
+                <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Retirado</div>
                 <div className="mono font-medium text-[14px]">{money(gastado)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-[#7A7263] uppercase mb-0.5">Disponible</div>
-                <div className="mono font-medium text-[14px]" style={{ color: disponible >= 0 ? GREEN : RED }}>{money(disponible)}</div>
+                <div className="mono font-medium text-[14px]" style={{ color: disponible >= RESERVA_MINIMA_ANTES_SOCIEDAD ? GREEN : RED }}>{money(disponible)}</div>
               </div>
             </div>
+            {bajoReserva && (
+              <div className="text-[11px] mt-2 text-center" style={{ color: RED }}>
+                ⚠ Por debajo de la reserva mínima de {money(RESERVA_MINIMA_ANTES_SOCIEDAD)}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -4106,7 +4149,7 @@ function Reportes({ data, update }) {
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
                         <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
-                        <div className="text-[9px] text-[#7A7263]">ganancia (ya restado reembolso)</div>
+                        <div className="text-[9px] text-[#7A7263]">mitad de la ganancia (50/50)</div>
                       </div>
                     ))}
                   </div>
@@ -5256,12 +5299,13 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   nominaT.forEach((n) => acumular(n, "Nómina"));
   const listaReembolsos = Object.values(reembolsosTrabajo);
 
-  // Primero se reembolsa a quien puso dinero de su bolsa, y lo que resta se divide 50/50 entre los socios.
-  // Si ya se confirmó cuánto pagó realmente el cliente (estimadoPagado), se usa ese número en vez del estimado completo.
+  // gananciaParaReparto (= total − materiales − mano de obra, con los TOTALES completos) YA tiene descontado
+  // lo que pagaron los socios de su bolsillo — por eso se divide 50/50 directo, SIN restar el reembolso otra vez.
+  // El reembolso se le suma aparte a quien puso el dinero (ver reembolsoDeSocio más abajo).
   const gananciaParaReparto = c.tienePagoReal ? c.gananciaReal : c.ganancia;
   const gananciaBase = c.tienePagoReal ? Number(trabajo.estimadoPagado) : Number(trabajo.estimado);
   const totalReembolsosTrabajo = listaReembolsos.reduce((s, r) => s + r.total, 0);
-  const restoARepartir = gananciaParaReparto - totalReembolsosTrabajo;
+  const restoARepartir = gananciaParaReparto;
   const mitadResto = restoARepartir / 2;
   const cuotaBase = restoARepartir / 2;
   const reembolsoDeSocio = (socioId) => reembolsosTrabajo[socioId]?.total || 0;
@@ -5395,11 +5439,20 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               <Td center>Egreso directo</Td>
               <Td right bold>{money(c.materiales)}</Td>
             </tr>
-            <tr>
-              <Td>Mano de obra ejecutada (subtotal)</Td>
-              <Td center>Egreso directo</Td>
-              <Td right bold>{money(c.manoDeObra)}</Td>
-            </tr>
+            {c.manoDeObraPagada > 0 && (
+              <tr>
+                <Td>Mano de obra ya pagada</Td>
+                <Td center>Egreso directo</Td>
+                <Td right bold>{money(c.manoDeObraPagada)}</Td>
+              </tr>
+            )}
+            {c.manoDeObraPendiente > 0 && (
+              <tr>
+                <Td>Mano de obra pendiente de pagar</Td>
+                <Td center>Egreso acumulado</Td>
+                <Td right bold>{money(c.manoDeObraPendiente)}</Td>
+              </tr>
+            )}
             {c.materialesAportadosPorCliente > 0 && (
               <tr>
                 <Td>Materiales comprados directo por el cliente</Td>
@@ -5437,7 +5490,14 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               {listaReembolsos.map((r) => (
                 <tr key={r.nombre}>
                   <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Gastos" : r.materiales > 0 ? "Materiales" : "Mano de obra"} (reembolso)</Td>
+                  <Td>
+                    {r.materiales > 0 && r.nomina > 0 ? "Gastos" : r.materiales > 0 ? "Materiales" : "Mano de obra"} (reembolso)
+                    {r.materiales > 0 && r.nomina > 0 && (
+                      <div className="text-[11px]" style={{ color: "#888" }}>
+                        (Mano de obra: {money(r.nomina)} + Materiales: {money(r.materiales)})
+                      </div>
+                    )}
+                  </Td>
                   <Td center><Pill estado="pendiente">Pendiente</Pill></Td>
                   <Td right bold>{money(r.total)}</Td>
                 </tr>
@@ -5456,28 +5516,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales pagados por cliente</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materialesAportadosPorCliente)}</td></tr>
             )}
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales de la obra</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materiales)}</td></tr>
-            <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos mano de obra ejecutada</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.manoDeObra)}</td></tr>
-            {data.socios.map((s) => {
-              const reembolsoPropio = reembolsoDeSocio(s.id);
-              if (reembolsoPropio <= 0) return null;
-              return (
-                <tr key={s.id}>
-                  <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>(−) Reembolso pendiente a {s.nombre}</td>
-                  <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(reembolsoPropio)}</td>
-                </tr>
-              );
-            })}
-            {totalReembolsosTrabajo > 0 && (
-              <tr>
-                <td className="text-[11px] py-1" style={{ color: "#B26A00" }} colSpan={2}>
-                  (Esto no es un gasto nuevo — es la parte de arriba que {data.socios.filter((s) => reembolsoDeSocio(s.id) > 0).map((s) => s.nombre).join(" y ")} pagó de su bolsillo, y que se le regresa completa en vez de repartirla)
-                </td>
-              </tr>
-            )}
+            <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos mano de obra (pagada + pendiente)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.manoDeObra)}</td></tr>
             {c.manoDeObraPendiente > 0 && (
               <tr>
-                <td className="text-[11px] py-1" style={{ color: "#B26A00" }} colSpan={2}>
-                  (De esos ${c.manoDeObraPendiente.toFixed(2)} de mano de obra, todavía no se han pagado — ya están incluidos arriba, no se restan doble)
+                <td className="text-[11px] py-1" style={{ color: "#888" }} colSpan={2}>
+                  (De esos ${c.manoDeObraPendiente.toFixed(2)}, todavía no se le han pagado a nadie — quedan pendientes)
                 </td>
               </tr>
             )}
@@ -5486,6 +5529,24 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               <td className="text-[14px] font-bold py-2.5 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(restoARepartir)}</td>
             </tr>
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>Cuota base por socio (50% / 50%)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>{money(cuotaBase)} c/u</td></tr>
+            {data.socios.map((s) => {
+              const reembolsoPropio = reembolsoDeSocio(s.id);
+              if (reembolsoPropio <= 0) return null;
+              const rb = reembolsosTrabajo[s.id];
+              return (
+                <tr key={s.id}>
+                  <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>
+                    (+) Además, se le devuelve a {s.nombre} lo que puso de su bolsillo
+                    {rb && rb.materiales > 0 && rb.nomina > 0 && (
+                      <div className="text-[11px]" style={{ color: "#B29060" }}>
+                        (Mano de obra: {money(rb.nomina)} + Materiales: {money(rb.materiales)})
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>+{money(reembolsoPropio)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
