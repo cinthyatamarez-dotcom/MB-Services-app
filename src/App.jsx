@@ -463,11 +463,8 @@ function materialNeto(m) {
 }
 
 function calcTrabajo(t, data) {
-  // Los materiales que pagó directamente el cliente no cuentan como gasto nuestro
-  const materialesPropios = data.materiales.filter((m) => m.trabajoId === t.id && m.pagadoPor !== "cliente");
-  const materialesCliente = data.materiales.filter((m) => m.trabajoId === t.id && m.pagadoPor === "cliente");
+  const materialesPropios = data.materiales.filter((m) => m.trabajoId === t.id);
   const materiales = materialesPropios.reduce((s, m) => s + materialNeto(m), 0);
-  const materialesAportadosPorCliente = materialesCliente.reduce((s, m) => s + materialNeto(m), 0);
   const nominaItems = data.nomina.filter((n) => n.trabajoId === t.id);
   const manoDeObra = nominaItems.reduce((s, n) => s + Number(n.monto), 0);
   const manoDeObraPagada = nominaItems.filter((n) => n.estado !== "pendiente").reduce((s, n) => s + Number(n.monto), 0);
@@ -486,13 +483,35 @@ function calcTrabajo(t, data) {
 
   // Cuánto reembolsarle a cada persona, separado por materiales y por nómina — no incluye lo que puso
   // la empresa (a la empresa no hay que reembolsarle) ni lo que puso el cliente.
+  // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
+  // reembolso — ya tenía esa plata guardada. Cualquier OTRA cuenta o persona que pague de lo suyo
+  // (incluyendo la empresa/MB Services pagando con fondos propios) sí recibe reembolso.
   const reembolsoMap = {};
+  const reposicionCajaChicaMap = {};
   const acumularReembolso = (item, tipoLabel, montoOverride) => {
     const pagador = item.pagadoPor || "empresa";
-    if (pagador === "empresa" || pagador === "cliente" || pagador === "sindefinir") return;
-    const key = pagador + "|" + tipoLabel;
-    if (!reembolsoMap[key]) reembolsoMap[key] = { pagadorId: pagador, nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0 };
-    reembolsoMap[key].monto += montoOverride !== undefined ? montoOverride : Number(item.monto);
+    if (pagador === "cliente" || pagador === "sindefinir") return;
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    const montoFinal = montoOverride !== undefined ? montoOverride : Number(item.monto);
+    if (cuentaPago?.esCuentaAntesSociedad) {
+      // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
+      // En vez de desaparecer el gasto, se muestra como reposición de caja chica.
+      const keyCaja = "caja:" + cuentaPago.id + "|" + tipoLabel;
+      if (!reposicionCajaChicaMap[keyCaja]) {
+        reposicionCajaChicaMap[keyCaja] = { cuentaId: cuentaPago.id, nombre: cuentaPago.nombre, tipoLabel, monto: 0 };
+      }
+      reposicionCajaChicaMap[keyCaja].monto += montoFinal;
+      return;
+    }
+    const esEmpresa = pagador === "empresa";
+    const cuentaNombre = cuentaPago?.nombre || "la cuenta";
+    const key = esEmpresa ? "cuenta:" + item.cuentaId + "|" + tipoLabel : pagador + "|" + tipoLabel;
+    if (!reembolsoMap[key]) {
+      reembolsoMap[key] = esEmpresa
+        ? { pagadorId: "cuenta:" + item.cuentaId, nombre: cuentaNombre, tipoLabel, monto: 0, esCuenta: true }
+        : { pagadorId: pagador, nombre: pagadorNombre(data, pagador), tipoLabel, monto: 0, esCuenta: false };
+    }
+    reembolsoMap[key].monto += montoFinal;
   };
   materialesPropios.forEach((m) => acumularReembolso(m, "materiales", materialNeto(m)));
   nominaItems.forEach((n) => acumularReembolso(n, "nómina"));
@@ -500,18 +519,15 @@ function calcTrabajo(t, data) {
   const totalReembolsosTrabajo = reembolsoPorPersona.reduce((s, r) => s + r.monto, 0);
   // Cuánto se le debe reembolsar a un socio específico en este trabajo (suma materiales + nómina)
   const reembolsoDeSocio = (socioId) => reembolsoPorPersona.filter((r) => r.pagadorId === socioId).reduce((s, r) => s + r.monto, 0);
+  // Gastos pagados desde la cuenta donde cae el pago del cliente: no se reembolsan,
+  // se muestran como reposición de fondos a la caja chica de esa cuenta.
+  const reposicionesCajaChica = Object.values(reposicionCajaChicaMap).sort((a, b) => a.nombre.localeCompare(b.nombre) || a.tipoLabel.localeCompare(b.tipoLabel));
 
-  // El estimado se descuenta automáticamente por lo que el cliente ya compró directo (con su propio dinero).
-  // Ejemplo: estimado $12,000, el cliente compró $3,000 en materiales por su cuenta → el estimado ajustado queda en $9,000.
-  const estimadoAjustado = Number(t.estimado || 0) - materialesAportadosPorCliente;
-  const ganancia = estimadoAjustado - materiales - manoDeObra;
-  // Si ya se sabe cuánto pagó realmente el cliente, ese número YA viene neto (sin los materiales que compró él mismo),
-  // así que no se le vuelve a restar materialesAportadosPorCliente — se usa tal cual.
+  // Se trabaja directo con el número final que dice el cliente (Estimado / Estimado pagado),
+  // sin restarle nada por materiales que el cliente haya comprado por su cuenta.
+  const ganancia = Number(t.estimado || 0) - materiales - manoDeObra;
   const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
-  // Igual que con el Estimado, al "Estimado pagado" también se le resta lo que el cliente compró directo —
-  // así no tienes que hacer esa resta tú misma antes de escribirlo, escribes el número completo tal cual.
-  const estimadoPagadoAjustado = tienePagoReal ? Number(t.estimadoPagado || 0) - materialesAportadosPorCliente : null;
-  const gananciaReal = tienePagoReal ? estimadoPagadoAjustado - materiales - manoDeObra : ganancia;
+  const gananciaReal = tienePagoReal ? Number(t.estimadoPagado || 0) - materiales - manoDeObra : ganancia;
   // Ganancia final que de verdad se reparte entre los socios: usa el pago real si ya se confirmó,
   // y siempre resta lo que se le debe reembolsar a quien puso dinero de su bolsa en este trabajo.
   const gananciaParaReparto = tienePagoReal ? gananciaReal : ganancia;
@@ -522,8 +538,6 @@ function calcTrabajo(t, data) {
   const mitadResto = restoARepartir / 2;
   return {
     materiales,
-    materialesAportadosPorCliente,
-    estimadoAjustado,
     manoDeObra,
     manoDeObraPagada,
     manoDeObraPendiente,
@@ -531,11 +545,11 @@ function calcTrabajo(t, data) {
     reembolsoPorPersona,
     totalReembolsosTrabajo,
     reembolsoDeSocio,
+    reposicionesCajaChica,
     ganancia,
     porSocio: ganancia / 2,
     tienePagoReal,
     gananciaReal,
-    estimadoPagadoAjustado,
     porSocioReal: gananciaReal / 2,
     gananciaParaReparto,
     restoARepartir,
@@ -1099,12 +1113,6 @@ function Trabajos({ data, update, onViewPhoto }) {
                       ))}
                     </div>
                   )}
-                  {c.materialesAportadosPorCliente > 0 && (
-                    <>
-                      <Row label="Materiales que compró el cliente directo" value={money(c.materialesAportadosPorCliente)} />
-                      <Row label="Estimado ajustado (estimado − esos materiales)" value={money(c.estimadoAjustado)} />
-                    </>
-                  )}
                   {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
                       {c.reembolsoPorPersona.map((r, i) => (
@@ -1115,10 +1123,20 @@ function Trabajos({ data, update, onViewPhoto }) {
                       ))}
                     </div>
                   )}
+                  {c.reposicionesCajaChica.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.reposicionesCajaChica.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: GREEN }}>
+                          <span>Reposición de caja chica — {r.nombre} ({r.tipoLabel})</span>
+                          <span className="mono">{money(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <Row label="Ganancia según estimado" value={money(c.ganancia)} bold={!c.tienePagoReal} accent={c.ganancia >= 0 ? GREEN : RED} />
 
                   <div className="mt-2 mb-1">
-                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Total final que pagó el cliente (el número completo, sin restar nada — la app resta sola los materiales que compró el cliente)</label>
+                    <label className="text-[11px] text-[#7A7263] block mb-0.5">Total final que pagó el cliente (el número completo que acordaron)</label>
                     <input
                       className="ledger-input text-xs"
                       type="number"
@@ -1127,9 +1145,6 @@ function Trabajos({ data, update, onViewPhoto }) {
                       onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimadoPagado = e.target.value; })}
                     />
                   </div>
-                  {c.tienePagoReal && c.materialesAportadosPorCliente > 0 && (
-                    <Row label="Total final ajustado (menos esos materiales)" value={money(c.estimadoPagadoAjustado)} />
-                  )}
                   {c.tienePagoReal && (
                     <Row label="Ganancia real (según lo pagado)" value={money(c.gananciaReal)} bold accent={c.gananciaReal >= 0 ? GREEN : RED} />
                   )}
@@ -2103,10 +2118,6 @@ function Bitacora({ data, update }) {
                   {pagoForm.formaPago === "cheque" && (
                     <input className="ledger-input text-xs" placeholder="Número de cheque" value={pagoForm.numeroCheque || ""} onChange={(e) => setPagoForm({ ...pagoForm, numeroCheque: e.target.value })} />
                   )}
-                  <label className="flex items-center gap-1.5 text-[11px] text-[#7A7263] cursor-pointer">
-                    <input type="checkbox" checked={!!pagoForm.antesSociedad} onChange={(e) => setPagoForm({ ...pagoForm, antesSociedad: e.target.checked })} />
-                    Pagado con dinero de antes de la sociedad
-                  </label>
                   <div className="flex gap-2">
                     <button className="btn-primary" onClick={() => guardarPago(b.id)}><Check size={13} /> Guardar pago</button>
                     <button className="text-xs text-[#7A7263] px-2" onClick={() => { setPagoAbiertoId(null); setPagoForm({}); }}>Cancelar</button>
@@ -2346,10 +2357,6 @@ function Nomina({ data, update }) {
               {payForm.formaPago === "cheque" && (
                 <input className="ledger-input" placeholder="Número de cheque" value={payForm.numeroCheque || ""} onChange={(e) => setPayForm({ ...payForm, numeroCheque: e.target.value })} />
               )}
-              <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
-                <input type="checkbox" checked={!!payForm.antesSociedad} onChange={(e) => setPayForm({ ...payForm, antesSociedad: e.target.checked })} />
-                Pagado con dinero de antes de la sociedad
-              </label>
               <div className="flex gap-2">
                 <button className="btn-primary" onClick={addPago}><Check size={14} /> Guardar</button>
                 <button className="text-sm text-[#7A7263] px-2" onClick={() => setPayForm(null)}>Cancelar</button>
@@ -2835,7 +2842,6 @@ function Materiales({ data, update, onViewPhoto }) {
             )}
             <select className="ledger-input" value={scan.pagadoPor} onChange={(e) => setScan({ ...scan, pagadoPor: e.target.value })}>
               <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-              <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
               {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
               <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
             </select>
@@ -2857,10 +2863,6 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
-                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                          <input type="checkbox" checked={!!scan.antesSociedad} onChange={(e) => setScan({ ...scan, antesSociedad: e.target.checked })} />
-                          Este gasto salió de dinero de antes de la sociedad
-                        </label>
               </>
             )}
           </div>
@@ -2899,7 +2901,6 @@ function Materiales({ data, update, onViewPhoto }) {
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           <select className="ledger-input" value={form.pagadoPor || "empresa"} onChange={(e) => setForm({ ...form, pagadoPor: e.target.value })}>
             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-            <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
             {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
             <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
           </select>
@@ -2921,10 +2922,6 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
-                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                          <input type="checkbox" checked={!!form.antesSociedad} onChange={(e) => setForm({ ...form, antesSociedad: e.target.checked })} />
-                          Este gasto salió de dinero de antes de la sociedad
-                        </label>
             </>
           )}
           <input className="ledger-input" placeholder="Número de cheque (si aplica)" value={form.numeroCheque || ""} onChange={(e) => setForm({ ...form, numeroCheque: e.target.value })} />
@@ -3087,8 +3084,7 @@ function Materiales({ data, update, onViewPhoto }) {
                           onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
                         >
                           <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-                          <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
-                          {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                                      {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                           <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
                         </select>
                         {editMaterialForm.pagadoPor === "empleado" && (
@@ -3107,10 +3103,6 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
-                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                          <input type="checkbox" checked={!!editMaterialForm.antesSociedad} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, antesSociedad: e.target.checked })} />
-                          Este gasto salió de dinero de antes de la sociedad
-                        </label>
                         <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                         <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                         <div className="flex gap-2">
@@ -3242,8 +3234,7 @@ function Materiales({ data, update, onViewPhoto }) {
                             onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
                           >
                             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
-                            <option value="cliente">Lo pagó la empresa que nos contrató (no afecta la ganancia)</option>
-                            {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
+                                          {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                             <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
                           </select>
                           {editMaterialForm.pagadoPor === "empleado" && (
@@ -3262,10 +3253,6 @@ function Materiales({ data, update, onViewPhoto }) {
                             Este gasto es de la empresa (aunque salió de esta cuenta personal)
                           </label>
                         )}
-                        <label className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                          <input type="checkbox" checked={!!editMaterialForm.antesSociedad} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, antesSociedad: e.target.checked })} />
-                          Este gasto salió de dinero de antes de la sociedad
-                        </label>
                           <input className="ledger-input text-xs" placeholder="Número de cheque (si aplica)" value={editMaterialForm.numeroCheque || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroCheque: e.target.value })} />
                           <input className="ledger-input text-xs" placeholder="Número de invoice" value={editMaterialForm.numeroInvoice || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, numeroInvoice: e.target.value })} />
                           <div className="flex gap-2">
@@ -3572,7 +3559,7 @@ function Cuentas({ data, update, onViewPhoto }) {
 
   const addCuenta = () => {
     if (!form?.nombre) return;
-    update((d) => d.cuentas.push({ id: uid(), nombre: form.nombre, banco: form.banco || "", saldoInicial: Number(form.saldoInicial || 0), esPersonal: !!form.esPersonal }));
+    update((d) => d.cuentas.push({ id: uid(), nombre: form.nombre, banco: form.banco || "", saldoInicial: Number(form.saldoInicial || 0), esPersonal: !!form.esPersonal, esCuentaAntesSociedad: !!form.esCuentaAntesSociedad }));
     setForm(null);
   };
 
@@ -3637,6 +3624,9 @@ function Cuentas({ data, update, onViewPhoto }) {
                     {c.esPersonal && (
                       <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Personal</span>
                     )}
+                    {c.esCuentaAntesSociedad && (
+                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#EFE6D8", color: "#7A5B2E" }}>No se reembolsa</span>
+                    )}
                   </div>
                   <div className="text-[11px] text-[#7A7263]">{c.banco}</div>
                   <button
@@ -3645,6 +3635,13 @@ function Cuentas({ data, update, onViewPhoto }) {
                     onClick={() => update((d) => { const cuenta = d.cuentas.find((x) => x.id === c.id); cuenta.esPersonal = !cuenta.esPersonal; })}
                   >
                     Marcar como {c.esPersonal ? "cuenta de la empresa" : "cuenta personal"}
+                  </button>
+                  <button
+                    className="text-[10px] underline mt-0.5 block"
+                    style={{ color: "#7A7263" }}
+                    onClick={() => update((d) => { const cuenta = d.cuentas.find((x) => x.id === c.id); cuenta.esCuentaAntesSociedad = !cuenta.esCuentaAntesSociedad; })}
+                  >
+                    {c.esCuentaAntesSociedad ? "Quitar marca de \"no se reembolsa\"" : "Marcar como: aquí cae el pago del cliente (no se reembolsa)"}
                   </button>
                 </div>
                 <button className="text-[#A13D2E]" onClick={() => update((d) => { d.cuentas = d.cuentas.filter((x) => x.id !== c.id); })}>
@@ -3675,6 +3672,10 @@ function Cuentas({ data, update, onViewPhoto }) {
           <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
             <input type="checkbox" checked={!!form.esPersonal} onChange={(e) => setForm({ ...form, esPersonal: e.target.checked })} />
             Es cuenta personal (ej. CashApp de un socio, no de la empresa)
+          </label>
+          <label className="flex items-center gap-1.5 text-[12px] text-[#7A7263] cursor-pointer">
+            <input type="checkbox" checked={!!form.esCuentaAntesSociedad} onChange={(e) => setForm({ ...form, esCuentaAntesSociedad: e.target.checked })} />
+            Aquí cae el pago del cliente — nunca se le reembolsa a nadie cuando paga (ej. Max One)
           </label>
           <div className="flex gap-2">
             <button className="btn-primary" onClick={addCuenta}><Check size={14} /> Guardar</button>
@@ -3950,6 +3951,12 @@ function Cuentas({ data, update, onViewPhoto }) {
                           {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
                       </div>
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <label className="flex items-center gap-1.5 text-[11px] text-[#7A7263] cursor-pointer">
+                          <input type="checkbox" checked={!!transferEditTemp.antesSociedad} onChange={(e) => setTransferEditTemp({ ...transferEditTemp, antesSociedad: e.target.checked })} />
+                          Se descuenta del dinero de antes de la sociedad
+                        </label>
+                      </div>
                       <div className="flex gap-1.5 mt-1.5">
                         <button
                           className="text-[11px] px-2 py-1 border"
@@ -3957,7 +3964,7 @@ function Cuentas({ data, update, onViewPhoto }) {
                           onClick={() => {
                             update((d) => {
                               const item = d.transferencias.find((x) => x.id === tr.id);
-                              if (item) { item.deCuentaId = transferEditTemp.deCuentaId; item.aCuentaId = transferEditTemp.aCuentaId; }
+                              if (item) { item.deCuentaId = transferEditTemp.deCuentaId; item.aCuentaId = transferEditTemp.aCuentaId; item.antesSociedad = !!transferEditTemp.antesSociedad; }
                             });
                             setEditandoTransferId(null);
                           }}
@@ -3983,7 +3990,7 @@ function Cuentas({ data, update, onViewPhoto }) {
                       <button
                         className="text-[#7A7263]"
                         title="Cambiar las cuentas de esta transferencia"
-                        onClick={() => { setEditandoTransferId(tr.id); setTransferEditTemp({ deCuentaId: tr.deCuentaId || "", aCuentaId: tr.aCuentaId || "" }); }}
+                        onClick={() => { setEditandoTransferId(tr.id); setTransferEditTemp({ deCuentaId: tr.deCuentaId || "", aCuentaId: tr.aCuentaId || "", antesSociedad: !!tr.antesSociedad }); }}
                       >
                         <PenLine size={11} />
                       </button>
@@ -4127,12 +4134,6 @@ function Reportes({ data, update }) {
                   <Row label="Estimado" value={money(Number(t.estimado))} />
                   <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
                   <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
-                  {c.materialesAportadosPorCliente > 0 && (
-                    <>
-                      <Row label="Materiales que compró el cliente directo" value={money(c.materialesAportadosPorCliente)} />
-                      <Row label="Estimado ajustado (estimado − esos materiales)" value={money(c.estimadoAjustado)} />
-                    </>
-                  )}
                   {c.reembolsoPorPersona.length > 0 && (
                     <div className="pl-3 mb-1 space-y-0.5">
                       {c.reembolsoPorPersona.map((r, i) => (
@@ -4746,11 +4747,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
 
-  // Materiales del trabajo, con la misma regla: si lo pagó el cliente directo, no es gasto de la empresa/socios (se excluye).
-  // También respeta "esGastoEmpresa" igual que la mano de obra.
+  // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
     if (m.trabajoId !== trabajo.id) return false;
-    if (m.pagadoPor === "cliente") return false;
     if (m.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === m.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
@@ -4769,25 +4768,40 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const manoDeObraPendiente = nominaT.filter((n) => n.estado === "pendiente").reduce((s, n) => s + Number(n.monto || 0), 0);
   const totalMateriales = materialesT.reduce((s, m) => s + Number(m.monto || 0), 0);
 
-  // Reembolsos: mano de obra o materiales ya pagados, pero con dinero de un socio (no de la empresa/cliente)
-  const reembolsosPorSocio = {};
+  // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
+  // reembolso. Cualquier otra cuenta o persona que pague de lo suyo (incluida la empresa/MB Services
+  // pagando con fondos propios) sí recibe reembolso.
+  const reembolsosPorSocio = {}; // key: socio.id, o "cuenta:ID" si pagó la empresa desde una cuenta reembolsable → { nombre, monto, esCuenta }
+  const acumularReembolsoSocio = (item) => {
+    const pagador = item.pagadoPor || "empresa";
+    if (pagador === "cliente" || pagador === "sindefinir") return;
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    if (cuentaPago?.esCuentaAntesSociedad) return; // esta cuenta nunca se reembolsa
+    const socio = data.socios.find((s) => s.id === pagador);
+    const esEmpresa = !socio;
+    const key = esEmpresa ? "cuenta:" + item.cuentaId : socio.id;
+    const nombre = esEmpresa ? (cuentaPago?.nombre || "la cuenta") : socio.nombre;
+    if (!reembolsosPorSocio[key]) reembolsosPorSocio[key] = { nombre, monto: 0, esCuenta: esEmpresa };
+    reembolsosPorSocio[key].monto += Number(item.monto || 0);
+  };
   nominaT.forEach((n) => {
-    const socio = data.socios.find((s) => s.id === n.pagadoPor);
-    if (socio && n.estado !== "pendiente" && !n.reembolsado) {
-      reembolsosPorSocio[socio.id] = (reembolsosPorSocio[socio.id] || 0) + Number(n.monto || 0);
-    }
+    if (n.estado !== "pendiente" && !n.reembolsado) acumularReembolsoSocio(n);
   });
   materialesT.forEach((m) => {
-    const socio = data.socios.find((s) => s.id === m.pagadoPor);
-    if (socio && !m.reembolsado) {
-      reembolsosPorSocio[socio.id] = (reembolsosPorSocio[socio.id] || 0) + Number(m.monto || 0);
-    }
+    if (!m.reembolsado) acumularReembolsoSocio(m);
   });
-  const totalReembolsos = Object.values(reembolsosPorSocio).reduce((s, v) => s + v, 0);
+  const totalReembolsos = Object.values(reembolsosPorSocio).reduce((s, r) => s + r.monto, 0);
 
-  // Materiales pagados directo por la empresa (no por un socio) — esos sí reducen la ganancia directamente.
-  // Los pagados por un socio ya están contados dentro de totalReembolsos, así que no se restan aparte (para no restarlos dos veces).
-  const materialesPagadosPorEmpresa = materialesT.filter((m) => !data.socios.find((s) => s.id === m.pagadoPor)).reduce((s, m) => s + Number(m.monto || 0), 0);
+  // Materiales que NO generan reembolso para nadie (pagados desde la cuenta "antes de la sociedad",
+  // o marcados cliente/sindefinir) — esos sí reducen la ganancia directamente aquí.
+  // Los que SÍ generan reembolso (socio, o empresa pagando desde otra cuenta) ya están contados
+  // dentro de totalReembolsos, así que no se restan aparte (para no restarlos dos veces).
+  const materialesPagadosPorEmpresa = materialesT.filter((m) => {
+    const p = m.pagadoPor || "empresa";
+    if (p === "cliente" || p === "sindefinir") return true;
+    const cuentaPago = data.cuentas.find((c) => c.id === m.cuentaId);
+    return !!cuentaPago?.esCuentaAntesSociedad;
+  }).reduce((s, m) => s + Number(m.monto || 0), 0);
 
   const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos;
   const cuotaBase = gananciaNeta / 2;
@@ -5063,10 +5077,10 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                 <td className="text-sm py-1.5 text-right">-{money(materialesPagadosPorEmpresa)}</td>
               </tr>
             )}
-            {Object.entries(reembolsosPorSocio).map(([socioId, monto]) => (
-              <tr key={socioId}>
-                <td className="text-sm py-1.5 pl-2.5">(–) Reembolso a {data.socios.find((s) => s.id === socioId)?.nombre}</td>
-                <td className="text-sm py-1.5 text-right">-{money(monto)}</td>
+            {Object.entries(reembolsosPorSocio).map(([key, r]) => (
+              <tr key={key}>
+                <td className="text-sm py-1.5 pl-2.5">(–) Reembolso a {r.nombre}</td>
+                <td className="text-sm py-1.5 text-right">-{money(r.monto)}</td>
               </tr>
             ))}
             <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
@@ -5097,7 +5111,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             {data.socios.map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const reembolsoPropio = reembolsosPorSocio[s.id] || 0;
+              const reembolsoPropio = reembolsosPorSocio[s.id]?.monto || 0;
               const totalSocio = cuotaBase + reembolsoPropio;
               return (
                 <tr key={s.id}>
@@ -5282,18 +5296,24 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
-  // Reembolsos pendientes de ESTE trabajo únicamente (socios o trabajadores que pagaron de su bolsa)
+  // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
+  // reembolso. Cualquier otra cuenta o persona que pague de lo suyo (incluida la empresa/MB Services
+  // pagando con fondos propios) sí recibe reembolso.
   const reembolsosTrabajo = {};
   const acumular = (item, tipo) => {
-    const p = item.pagadoPor;
-    if (!p || p === "empresa" || p === "cliente" || p === "sindefinir" || item.reembolsado) return;
-    const nombre = pagadorNombre(data, p);
+    const p = item.pagadoPor || "empresa";
+    if (p === "cliente" || p === "sindefinir" || item.reembolsado) return;
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    if (cuentaPago?.esCuentaAntesSociedad) return; // esta cuenta nunca se reembolsa
+    const esEmpresa = p === "empresa";
+    const key = esEmpresa ? "cuenta:" + item.cuentaId : p;
+    const nombre = esEmpresa ? (cuentaPago?.nombre || "la cuenta") : pagadorNombre(data, p);
     const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
-    if (!reembolsosTrabajo[p]) reembolsosTrabajo[p] = { nombre, materiales: 0, nomina: 0, total: 0, items: [] };
-    if (tipo === "Material") reembolsosTrabajo[p].materiales += monto;
-    else reembolsosTrabajo[p].nomina += monto;
-    reembolsosTrabajo[p].total += monto;
-    reembolsosTrabajo[p].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto });
+    if (!reembolsosTrabajo[key]) reembolsosTrabajo[key] = { nombre, materiales: 0, nomina: 0, total: 0, items: [] };
+    if (tipo === "Material") reembolsosTrabajo[key].materiales += monto;
+    else reembolsosTrabajo[key].nomina += monto;
+    reembolsosTrabajo[key].total += monto;
+    reembolsosTrabajo[key].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto });
   };
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
@@ -5453,13 +5473,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                 <Td right bold>{money(c.manoDeObraPendiente)}</Td>
               </tr>
             )}
-            {c.materialesAportadosPorCliente > 0 && (
-              <tr>
-                <Td>Materiales comprados directo por el cliente</Td>
-                <Td center>Deducción</Td>
-                <Td right bold>{money(c.materialesAportadosPorCliente)}</Td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -5512,9 +5525,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
         <table style={{ width: "100%" }}>
           <tbody>
             <tr><td className="text-sm py-1.5">{c.tienePagoReal ? "Total recibido del cliente" : "Presupuesto (estimado)"}</td><td className="text-sm py-1.5 text-right font-bold">{money(gananciaBase)}</td></tr>
-            {c.materialesAportadosPorCliente > 0 && (
-              <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales pagados por cliente</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materialesAportadosPorCliente)}</td></tr>
-            )}
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales de la obra</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materiales)}</td></tr>
             <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos mano de obra (pagada + pendiente)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.manoDeObra)}</td></tr>
             {c.manoDeObraPendiente > 0 && (
