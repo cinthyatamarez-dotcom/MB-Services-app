@@ -1998,7 +1998,7 @@ function Bitacora({ data, update }) {
                             {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
                           </select>
                           <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoEditForm.monto || ""} onChange={(e) => setPagoEditForm({ ...pagoEditForm, monto: e.target.value })} />
-                          <select className="ledger-input text-xs" value={pagoEditForm.pagadoPor || "empresa"} onChange={(e) => setPagoEditForm({ ...pagoEditForm, pagadoPor: e.target.value })}>
+                          <select className="ledger-input text-xs" value={pagoEditForm.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setPagoEditForm({ ...pagoEditForm, pagadoPor: v, cuentaId: (v === "empresa" && !pagoEditForm.cuentaId && cDef) ? cDef : pagoEditForm.cuentaId }); }}>
                             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                             <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
                             <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
@@ -2094,7 +2094,7 @@ function Bitacora({ data, update }) {
                     {data.empleados.map((emp) => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
                   </select>
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoForm.monto || ""} onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })} />
-                  <select className="ledger-input text-xs" value={pagoForm.pagadoPor || "empresa"} onChange={(e) => setPagoForm({ ...pagoForm, pagadoPor: e.target.value })}>
+                  <select className="ledger-input text-xs" value={pagoForm.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setPagoForm({ ...pagoForm, pagadoPor: v, cuentaId: (v === "empresa" && !pagoForm.cuentaId && cDef) ? cDef : pagoForm.cuentaId }); }}>
                     <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                     <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
                     <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
@@ -2333,7 +2333,7 @@ function Nomina({ data, update }) {
                   Ya pagado
                 </button>
               </div>
-              <select className="ledger-input" value={payForm.pagadoPor || "empresa"} onChange={(e) => setPayForm({ ...payForm, pagadoPor: e.target.value })}>
+              <select className="ledger-input" value={payForm.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setPayForm({ ...payForm, pagadoPor: v, cuentaId: (v === "empresa" && !payForm.cuentaId && cDef) ? cDef : payForm.cuentaId }); }}>
                 <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                 <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
                 <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
@@ -2413,7 +2413,7 @@ function Nomina({ data, update }) {
                       Pagado
                     </button>
                   </div>
-                  <select className="ledger-input text-xs" value={editForm.pagadoPor || "empresa"} onChange={(e) => setEditForm({ ...editForm, pagadoPor: e.target.value })}>
+                  <select className="ledger-input text-xs" value={editForm.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setEditForm({ ...editForm, pagadoPor: v, cuentaId: (v === "empresa" && !editForm.cuentaId && cDef) ? cDef : editForm.cuentaId }); }}>
                     <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                     <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
                     <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
@@ -2840,7 +2840,7 @@ function Materiales({ data, update, onViewPhoto }) {
                 Le toca pagar esta factura a <b>{pagadorNombre(data, socioTurnoMaterial(data, scan.trabajoId))}</b> (se alterna con cada factura de este trabajo)
               </p>
             )}
-            <select className="ledger-input" value={scan.pagadoPor} onChange={(e) => setScan({ ...scan, pagadoPor: e.target.value })}>
+            <select className="ledger-input" value={scan.pagadoPor} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setScan({ ...scan, pagadoPor: v, cuentaId: (v === "empresa" && !scan.cuentaId && cDef) ? cDef : scan.cuentaId }); }}>
               <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
               {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
               <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
@@ -2899,7 +2899,7 @@ function Materiales({ data, update, onViewPhoto }) {
           )}
           <input className="ledger-input" type="number" placeholder="Monto" value={form.monto || ""} onChange={(e) => setForm({ ...form, monto: e.target.value })} />
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          <select className="ledger-input" value={form.pagadoPor || "empresa"} onChange={(e) => setForm({ ...form, pagadoPor: e.target.value })}>
+          <select className="ledger-input" value={form.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setForm({ ...form, pagadoPor: v, cuentaId: (v === "empresa" && !form.cuentaId && cDef) ? cDef : form.cuentaId }); }}>
             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
             {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
             <option value="empleado">Lo pagó un trabajador (a reembolsar)</option>
@@ -3081,7 +3081,7 @@ function Materiales({ data, update, onViewPhoto }) {
                         <select
                           className="ledger-input text-xs"
                           value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
-                          onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
+                          onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setEditMaterialForm({ ...editMaterialForm, pagadoPor: v, cuentaId: (v === "empresa" && !editMaterialForm.cuentaId && cDef) ? cDef : editMaterialForm.cuentaId }); }}
                         >
                           <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                                       {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
@@ -3231,7 +3231,7 @@ function Materiales({ data, update, onViewPhoto }) {
                           <select
                             className="ledger-input text-xs"
                             value={editMaterialForm.pagadoPor?.startsWith("empleado:") ? "empleado" : (editMaterialForm.pagadoPor || "empresa")}
-                            onChange={(e) => setEditMaterialForm({ ...editMaterialForm, pagadoPor: e.target.value })}
+                            onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setEditMaterialForm({ ...editMaterialForm, pagadoPor: v, cuentaId: (v === "empresa" && !editMaterialForm.cuentaId && cDef) ? cDef : editMaterialForm.cuentaId }); }}
                           >
                             <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
                                           {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
@@ -3726,6 +3726,7 @@ function Cuentas({ data, update, onViewPhoto }) {
         const filas = [];
         let totalGeneral = 0;
         data.trabajos.forEach((t) => {
+          if (t.estado !== "cerrado") return; // solo trabajos ya terminados/cerrados
           const c = calcTrabajo(t, data);
           const deEstaCuenta = (c.reposicionesCajaChica || []).filter((r) => r.cuentaId === cuenta.id);
           if (deEstaCuenta.length === 0) return;
@@ -3736,7 +3737,7 @@ function Cuentas({ data, update, onViewPhoto }) {
         if (filas.length === 0) return null;
         return (
           <div key={cuenta.id} className="card p-4 mb-4" style={{ borderColor: GREEN }}>
-            <div className="stamp text-[12px] mb-3" style={{ color: GREEN }}>REPOSICIÓN DE CAJA CHICA — {cuenta.nombre.toUpperCase()}</div>
+            <div className="stamp text-[12px] mb-3" style={{ color: GREEN }}>REPOSICIÓN DE CAJA CHICA — {cuenta.nombre.toUpperCase()} (TRABAJOS TERMINADOS)</div>
             <div className="space-y-1.5">
               {filas.map((f) => (
                 <div key={f.trabajoId} className="flex justify-between text-[12px]" style={{ color: "#4A4A4A" }}>
