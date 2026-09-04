@@ -3720,6 +3720,39 @@ function Cuentas({ data, update, onViewPhoto }) {
         );
       })()}
 
+      {data.cuentas.filter((cuenta) => cuenta.esCuentaAntesSociedad).map((cuenta) => {
+        // Recorre todos los trabajos y suma, por trabajo, lo que se pagó desde esta cuenta
+        // y que NO se reembolsa (porque aquí cae el pago del cliente) — solo se muestra como reposición.
+        const filas = [];
+        let totalGeneral = 0;
+        data.trabajos.forEach((t) => {
+          const c = calcTrabajo(t, data);
+          const deEstaCuenta = (c.reposicionesCajaChica || []).filter((r) => r.cuentaId === cuenta.id);
+          if (deEstaCuenta.length === 0) return;
+          const montoTrabajo = deEstaCuenta.reduce((s, r) => s + r.monto, 0);
+          totalGeneral += montoTrabajo;
+          filas.push({ trabajoId: t.id, nombre: t.nombre, numero: t.numeroTrabajo, monto: montoTrabajo });
+        });
+        if (filas.length === 0) return null;
+        return (
+          <div key={cuenta.id} className="card p-4 mb-4" style={{ borderColor: GREEN }}>
+            <div className="stamp text-[12px] mb-3" style={{ color: GREEN }}>REPOSICIÓN DE CAJA CHICA — {cuenta.nombre.toUpperCase()}</div>
+            <div className="space-y-1.5">
+              {filas.map((f) => (
+                <div key={f.trabajoId} className="flex justify-between text-[12px]" style={{ color: "#4A4A4A" }}>
+                  <span>Trabajo #{(f.numero || "").toString().padStart(4, "0") || "—"} · {f.nombre}</span>
+                  <span className="mono">{money(f.monto)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-[13px] font-medium mt-2 pt-2" style={{ borderTop: `1px solid ${LINE}` }}>
+              <span>Total repuesto a {cuenta.nombre}</span>
+              <span className="mono" style={{ color: GREEN }}>{money(totalGeneral)}</span>
+            </div>
+          </div>
+        );
+      })}
+
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="card p-4">
           <div className="stamp text-[13px] text-[#7A7263] mb-3">INGRESO DE CLIENTE</div>
@@ -4732,6 +4765,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const repartoPagado = trabajo.repartoPagado?.[tipo] || {};
   const [fechaEditando, setFechaEditando] = useState(null);
   const [fechaTemp, setFechaTemp] = useState("");
+  const [cuentaTemp, setCuentaTemp] = useState("");
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
   const tareas = (trabajo.descripcionTrabajo || "").split("\n").filter((linea) => linea.trim());
   const nombresCuentas = [...new Set(items.map((i) => data.cuentas.find((c) => c.id === i.cuentaId)?.nombre).filter(Boolean))];
@@ -4820,20 +4854,43 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   });
   // Los materiales ya tienen su propio resumen (total + reembolso) en la tabla de "Materiales" más abajo — no hace falta una nota por cada uno aquí.
 
-  const marcarPagado = (socioId, fecha) => {
+  // Al marcar como pagado, además de la etiqueta, se registra una transferencia real
+  // de salida desde la cuenta elegida, para que el saldo de esa cuenta se descuente al instante.
+  const marcarPagado = (socioId, fecha, cuentaId, monto) => {
     update((d) => {
       const t = d.trabajos.find((x) => x.id === trabajo.id);
       if (!t.repartoPagado) t.repartoPagado = {};
       if (!t.repartoPagado[tipo]) t.repartoPagado[tipo] = {};
-      t.repartoPagado[tipo][socioId] = { pagado: true, fecha: fecha || todayISO() };
+      const socioNombre = d.socios.find((s) => s.id === socioId)?.nombre || "Socio";
+      const numero = (t.numeroTrabajo || "").toString().padStart(4, "0") || "—";
+      let transferenciaId = "";
+      if (cuentaId && Number(monto) > 0) {
+        transferenciaId = uid();
+        d.transferencias.push({
+          id: transferenciaId,
+          deCuentaId: cuentaId,
+          aCuentaId: "",
+          monto: Number(monto),
+          fecha: fecha || todayISO(),
+          formaPago: "efectivo",
+          concepto: `Reparto de ganancia — ${socioNombre} — Trabajo #${numero}`,
+          antesSociedad: false,
+        });
+      }
+      t.repartoPagado[tipo][socioId] = { pagado: true, fecha: fecha || todayISO(), cuentaId: cuentaId || "", transferenciaId };
     });
     setFechaEditando(null);
   };
+  // Al deshacer, se borra también la transferencia que se había creado, para no dejar el descuento pegado.
   const marcarPendiente = (socioId) => {
     update((d) => {
       const t = d.trabajos.find((x) => x.id === trabajo.id);
       if (!t.repartoPagado) t.repartoPagado = {};
       if (!t.repartoPagado[tipo]) t.repartoPagado[tipo] = {};
+      const previo = t.repartoPagado[tipo][socioId];
+      if (previo?.transferenciaId) {
+        d.transferencias = d.transferencias.filter((tr) => tr.id !== previo.transferenciaId);
+      }
       t.repartoPagado[tipo][socioId] = { pagado: false, fecha: "" };
     });
   };
@@ -5130,15 +5187,31 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             })}
           </tbody>
         </table>
-        <div className="no-print flex gap-4 mt-2">
+        <div className="no-print flex flex-wrap gap-4 mt-2">
           {data.socios.map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
+            const reembolsoPropio = reembolsosPorSocio[s.id]?.monto || 0;
+            const totalSocio = cuotaBase + reembolsoPropio;
             return fechaEditando === s.id ? (
-              <div key={s.id} className="flex items-center gap-1.5">
+              <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px]" style={{ color: "#6B6B6B" }}>De qué cuenta sale {money(totalSocio)}:</span>
+                <select className="ledger-input text-[11px] py-1" value={cuentaTemp} onChange={(e) => setCuentaTemp(e.target.value)}>
+                  <option value="">Elige la cuenta…</option>
+                  {data.cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
-                <button className="text-[10px] underline" style={{ color: "#2E7D32" }} onClick={() => marcarPagado(s.id, fechaTemp)}>Guardar</button>
-                <button className="text-[10px] underline" style={{ color: "#6B6B6B" }} onClick={() => setFechaEditando(null)}>Cancelar</button>
+                <button
+                  className="text-[10px] underline disabled:opacity-40"
+                  style={{ color: "#2E7D32" }}
+                  disabled={!cuentaTemp}
+                  onClick={() => marcarPagado(s.id, fechaTemp, cuentaTemp, totalSocio)}
+                >
+                  Guardar y descontar
+                </button>
+                <button className="text-[10px] underline" style={{ color: "#6B6B6B" }} onClick={() => { setFechaEditando(null); setCuentaTemp(""); }}>Cancelar</button>
               </div>
             ) : (
               <button
@@ -5147,7 +5220,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                 style={{ color: "#6B6B6B" }}
                 onClick={() => {
                   if (pagado) marcarPendiente(s.id);
-                  else { setFechaTemp(todayISO()); setFechaEditando(s.id); }
+                  else { setFechaTemp(todayISO()); setCuentaTemp(""); setFechaEditando(s.id); }
                 }}
               >
                 {s.nombre}: marcar como {pagado ? "pendiente" : "pagado"}
@@ -5333,11 +5406,28 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const repartoCierre = trabajo.repartoPagadoCierre || {};
   const [fechaEditando, setFechaEditando] = useState(null);
   const [fechaTemp, setFechaTemp] = useState("");
-  const marcarPagadoCierre = (socioId, fecha) => {
+  const [cuentaTemp, setCuentaTemp] = useState("");
+  const marcarPagadoCierre = (socioId, fecha, cuentaId, monto) => {
     update((d) => {
       const t = d.trabajos.find((x) => x.id === trabajo.id);
       if (!t.repartoPagadoCierre) t.repartoPagadoCierre = {};
-      t.repartoPagadoCierre[socioId] = { pagado: true, fecha: fecha || todayISO() };
+      const socioNombre = d.socios.find((s) => s.id === socioId)?.nombre || "Socio";
+      const numero = (t.numeroTrabajo || "").toString().padStart(4, "0") || "—";
+      let transferenciaId = "";
+      if (cuentaId && Number(monto) > 0) {
+        transferenciaId = uid();
+        d.transferencias.push({
+          id: transferenciaId,
+          deCuentaId: cuentaId,
+          aCuentaId: "",
+          monto: Number(monto),
+          fecha: fecha || todayISO(),
+          formaPago: "efectivo",
+          concepto: `Reparto de ganancia (cierre) — ${socioNombre} — Trabajo #${numero}`,
+          antesSociedad: false,
+        });
+      }
+      t.repartoPagadoCierre[socioId] = { pagado: true, fecha: fecha || todayISO(), cuentaId: cuentaId || "", transferenciaId };
     });
     setFechaEditando(null);
   };
@@ -5345,6 +5435,10 @@ function ReciboModal({ trabajo, data, update, onClose }) {
     update((d) => {
       const t = d.trabajos.find((x) => x.id === trabajo.id);
       if (!t.repartoPagadoCierre) t.repartoPagadoCierre = {};
+      const previo = t.repartoPagadoCierre[socioId];
+      if (previo?.transferenciaId) {
+        d.transferencias = d.transferencias.filter((tr) => tr.id !== previo.transferenciaId);
+      }
       t.repartoPagadoCierre[socioId] = { pagado: false, fecha: "" };
     });
   };
@@ -5593,15 +5687,31 @@ function ReciboModal({ trabajo, data, update, onClose }) {
             })}
           </tbody>
         </table>
-        <div className="no-print flex gap-4 mt-2">
+        <div className="no-print flex flex-wrap gap-4 mt-2">
           {data.socios.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
+            const reembolsoPropio = reembolsoDeSocio(s.id);
+            const totalSocio = cuotaBase + reembolsoPropio;
             return fechaEditando === s.id ? (
-              <div key={s.id} className="flex items-center gap-1.5">
+              <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px]" style={{ color: "#7A7263" }}>De qué cuenta sale {money(totalSocio)}:</span>
+                <select className="ledger-input text-[11px] py-1" value={cuentaTemp} onChange={(e) => setCuentaTemp(e.target.value)}>
+                  <option value="">Elige la cuenta…</option>
+                  {data.cuentas.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
-                <button className="text-[10px] underline" style={{ color: GREEN }} onClick={() => marcarPagadoCierre(s.id, fechaTemp)}>Guardar</button>
-                <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => setFechaEditando(null)}>Cancelar</button>
+                <button
+                  className="text-[10px] underline disabled:opacity-40"
+                  style={{ color: GREEN }}
+                  disabled={!cuentaTemp}
+                  onClick={() => marcarPagadoCierre(s.id, fechaTemp, cuentaTemp, totalSocio)}
+                >
+                  Guardar y descontar
+                </button>
+                <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => { setFechaEditando(null); setCuentaTemp(""); }}>Cancelar</button>
               </div>
             ) : (
               <button
@@ -5610,7 +5720,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                 style={{ color: "#7A7263" }}
                 onClick={() => {
                   if (pagado) marcarPendienteCierre(s.id);
-                  else { setFechaTemp(todayISO()); setFechaEditando(s.id); }
+                  else { setFechaTemp(todayISO()); setCuentaTemp(""); setFechaEditando(s.id); }
                 }}
               >
                 {s.nombre}: marcar como {pagado ? "pendiente" : "pagado"}
