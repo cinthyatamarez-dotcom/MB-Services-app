@@ -252,6 +252,23 @@ export default function App() {
     );
   }
 
+  // Recordatorio: si un trabajo se marcó "terminado" y todavía no se registró lo que pagó el cliente
+  // (t.estimadoPagado vacío), avisamos 3 días antes de que se cumplan los 30 días desde esa fecha, y
+  // seguimos avisando (marcado como vencido) si ya se pasó ese plazo.
+  const hoyMs = new Date(todayISO() + "T00:00:00").getTime();
+  const trabajosPorCobrarPronto = data.trabajos
+    .filter((t) => t.estado === "cerrado" && t.fechaTerminado)
+    .filter((t) => {
+      const tienePagoReal = t.estimadoPagado !== undefined && t.estimadoPagado !== null && t.estimadoPagado !== "";
+      return !tienePagoReal;
+    })
+    .map((t) => {
+      const dias = Math.floor((hoyMs - new Date(t.fechaTerminado + "T00:00:00").getTime()) / 86400000);
+      return { trabajo: t, dias, vencido: dias >= 30 };
+    })
+    .filter((r) => r.dias >= 27)
+    .sort((a, b) => b.dias - a.dias);
+
   const desbloquear = () => {
     const claveGuardada = data.claveEdicion || CLAVE_EDICION;
     if (claveInput === claveGuardada) {
@@ -323,6 +340,18 @@ export default function App() {
       {!desbloqueado && (
         <div className="text-center text-[11px] py-1.5" style={{ background: "#FBF3E3", color: "#8A6416" }}>
           Modo solo lectura — toca el candado arriba para poder editar
+        </div>
+      )}
+
+      {trabajosPorCobrarPronto.length > 0 && (
+        <div className="px-4 sm:px-6 py-2 text-[12px]" style={{ background: "#FBEAEA", color: "#8A2E2E", borderBottom: "1px solid #E0B4B4" }}>
+          <span className="font-medium">Pago por confirmar: </span>
+          {trabajosPorCobrarPronto.map((r, i) => (
+            <span key={r.trabajo.id}>
+              {i > 0 && " · "}
+              {r.trabajo.apodo || r.trabajo.nombre} ({r.vencido ? `ya pasaron ${r.dias} días desde que terminó` : `faltan ${30 - r.dias} días para cumplir 30`})
+            </span>
+          ))}
         </div>
       )}
 
@@ -1572,6 +1601,7 @@ function Bitacora({ data, update }) {
   const [form, setForm] = useState(null);
   const [nuevoParticipante, setNuevoParticipante] = useState("");
   const [filtroTrabajo, setFiltroTrabajo] = useState("");
+  const [filtroPersona, setFiltroPersona] = useState("");
   const [editandoId, setEditandoId] = useState(null);
   const [extraTemp, setExtraTemp] = useState("");
   const [editandoTextoId, setEditandoTextoId] = useState(null);
@@ -1683,6 +1713,11 @@ function Bitacora({ data, update }) {
   // para que cada trabajo quede junto y separado visualmente del siguiente.
   const entradasOrdenadas = [...data.bitacora]
     .filter((b) => !filtroTrabajo || b.trabajoId === filtroTrabajo)
+    .filter((b) => {
+      if (!filtroPersona.trim()) return true;
+      const buscado = filtroPersona.trim().toLowerCase();
+      return (b.participantes || []).some((p) => nombreParticipante(data, p).toLowerCase().includes(buscado));
+    })
     .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
 
   const ultimaFechaPorTrabajo = {};
@@ -1703,16 +1738,58 @@ function Bitacora({ data, update }) {
     <div>
       <SectionTitle sub="Qué se hizo cada día, quién participó, y el estado de cada quien por separado">Actividad diaria</SectionTitle>
 
+      {(() => {
+        // Mismo recordatorio que aparece arriba de la app: trabajos cerrados sin pago confirmado,
+        // a 3 días o menos de cumplir 30 días desde que se marcaron como terminados.
+        const hoyMs = new Date(todayISO() + "T00:00:00").getTime();
+        const avisos = data.trabajos
+          .filter((t) => t.estado === "cerrado" && t.fechaTerminado)
+          .filter((t) => t.estimadoPagado === undefined || t.estimadoPagado === null || t.estimadoPagado === "")
+          .map((t) => {
+            const dias = Math.floor((hoyMs - new Date(t.fechaTerminado + "T00:00:00").getTime()) / 86400000);
+            return { trabajo: t, dias, vencido: dias >= 30 };
+          })
+          .filter((r) => r.dias >= 27)
+          .sort((a, b) => b.dias - a.dias);
+        if (avisos.length === 0) return null;
+        return (
+          <div className="card p-3 mb-4" style={{ borderColor: "#E0B4B4", background: "#FBEAEA" }}>
+            <div className="text-[11px] uppercase tracking-wide mb-1.5" style={{ color: "#8A2E2E" }}>Pago por confirmar</div>
+            <div className="space-y-1">
+              {avisos.map((r) => (
+                <div key={r.trabajo.id} className="text-[12px]" style={{ color: "#8A2E2E" }}>
+                  {r.trabajo.apodo || r.trabajo.nombre} — {r.vencido ? `ya pasaron ${r.dias} días desde que terminó` : `faltan ${30 - r.dias} días para cumplir 30`}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {data.trabajos.length > 0 && (
         <div className="card p-3 mb-4">
           <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Ver actividad de:</label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-2">
             <select className="ledger-input flex-1" value={filtroTrabajo} onChange={(e) => setFiltroTrabajo(e.target.value)}>
               <option value="">Todos los trabajos</option>
               {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</option>)}
             </select>
             {filtroTrabajo && (
               <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajo("")}>
+                Quitar filtro
+              </button>
+            )}
+          </div>
+          <label className="text-[11px] text-[#7A7263] uppercase tracking-wide block mb-1">Buscar por nombre de socio o empleado:</label>
+          <div className="flex items-center gap-2">
+            <input
+              className="ledger-input flex-1"
+              placeholder="Ej. Boris, David, o el nombre de un empleado…"
+              value={filtroPersona}
+              onChange={(e) => setFiltroPersona(e.target.value)}
+            />
+            {filtroPersona && (
+              <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroPersona("")}>
                 Quitar filtro
               </button>
             )}
@@ -3604,7 +3681,7 @@ function Cuentas({ data, update, onViewPhoto }) {
   };
 
   const formaPagoTexto = (fp, numCheque) => {
-    const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : "Efectivo";
+    const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : fp === "transferencia" ? "Transferencia" : "Efectivo";
     return fp === "cheque" && numCheque ? `${base} #${numCheque}` : base;
   };
 
@@ -3808,6 +3885,7 @@ function Cuentas({ data, update, onViewPhoto }) {
                 <option value="efectivo">Efectivo</option>
                 <option value="cheque">Cheque</option>
                 <option value="zelle">Zelle</option>
+                <option value="transferencia">Transferencia</option>
               </select>
               {incomeForm.formaPago === "cheque" && (
                 <input className="ledger-input" placeholder="Número de cheque" value={incomeForm.numeroCheque || ""} onChange={(e) => setIncomeForm({ ...incomeForm, numeroCheque: e.target.value })} />
@@ -5333,8 +5411,39 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
 
   const saldo = calcCuentaSaldo(cuenta, data);
 
+  // Mismo cálculo que el cuadrito de la pestaña Cuentas: gastos pagados desde esta cuenta
+  // que no se reembolsan porque aquí cae el pago del cliente — se listan como reposición.
+  const reposicionFilas = [];
+  let reposicionTotal = 0;
+  if (cuenta.esCuentaAntesSociedad) {
+    data.trabajos.forEach((t) => {
+      if (t.estado !== "cerrado") return;
+      const c = calcTrabajo(t, data);
+      const deEstaCuenta = (c.reposicionesCajaChica || []).filter((r) => r.cuentaId === cuenta.id);
+      if (deEstaCuenta.length === 0) return;
+      const montoTrabajo = deEstaCuenta.reduce((s, r) => s + r.monto, 0);
+      reposicionTotal += montoTrabajo;
+      reposicionFilas.push({ trabajoId: t.id, nombre: t.nombre, numero: t.numeroTrabajo, monto: montoTrabajo });
+    });
+  }
+
   return (
     <HojaImprimible titulo="Movimientos de cuenta" subtitulo={cuenta.nombre} onClose={onClose}>
+      {reposicionFilas.length > 0 && (
+        <div className="mb-3 pb-3" style={{ borderBottom: "2px solid #1E6B3E" }}>
+          <div className="text-sm font-semibold mb-1.5" style={{ color: "#1E6B3E" }}>REPOSICIÓN DE CAJA CHICA — {cuenta.nombre.toUpperCase()} (TRABAJOS TERMINADOS)</div>
+          {reposicionFilas.map((f) => (
+            <div key={f.trabajoId} className="flex justify-between text-sm" style={{ color: "#4A4A4A" }}>
+              <span>Trabajo #{(f.numero || "").toString().padStart(4, "0") || "—"} · {f.nombre}</span>
+              <span className="font-mono">{money(f.monto)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between text-sm font-semibold mt-1">
+            <span>Total repuesto</span>
+            <span className="font-mono" style={{ color: "#1E6B3E" }}>{money(reposicionTotal)}</span>
+          </div>
+        </div>
+      )}
       {movimientos.length === 0 && <div className="text-sm py-2">— sin movimientos —</div>}
       {movimientos.map((m, i) => (
         <div key={i} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
@@ -5359,7 +5468,7 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
 // Versión standalone de formaPagoTexto (fuera del componente Cuentas) para usar en el modal de movimientos
 function formaPagoTextoStandalone(fp, numCheque) {
   if (!fp) return "";
-  const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : "Efectivo";
+  const base = fp === "cheque" ? "Cheque" : fp === "zelle" ? "Zelle" : fp === "transferencia" ? "Transferencia" : "Efectivo";
   return fp === "cheque" && numCheque ? `${base} #${numCheque}` : base;
 }
 
@@ -5374,15 +5483,25 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   // reembolso. Cualquier otra cuenta o persona que pague de lo suyo (incluida la empresa/MB Services
   // pagando con fondos propios) sí recibe reembolso.
   const reembolsosTrabajo = {};
+  const reposicionesTrabajo = {};
   const acumular = (item, tipo) => {
     const p = item.pagadoPor || "empresa";
     if (p === "cliente" || p === "sindefinir" || item.reembolsado) return;
     const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
-    if (cuentaPago?.esCuentaAntesSociedad) return; // esta cuenta nunca se reembolsa
+    const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
+    if (cuentaPago?.esCuentaAntesSociedad) {
+      // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
+      // Se muestra como reposición de caja chica, en vez de desaparecer sin explicación.
+      const keyCaja = cuentaPago.id;
+      if (!reposicionesTrabajo[keyCaja]) reposicionesTrabajo[keyCaja] = { nombre: cuentaPago.nombre, materiales: 0, nomina: 0, total: 0 };
+      if (tipo === "Material") reposicionesTrabajo[keyCaja].materiales += monto;
+      else reposicionesTrabajo[keyCaja].nomina += monto;
+      reposicionesTrabajo[keyCaja].total += monto;
+      return;
+    }
     const esEmpresa = p === "empresa";
     const key = esEmpresa ? "cuenta:" + item.cuentaId : p;
     const nombre = esEmpresa ? (cuentaPago?.nombre || "la cuenta") : pagadorNombre(data, p);
-    const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
     if (!reembolsosTrabajo[key]) reembolsosTrabajo[key] = { nombre, materiales: 0, nomina: 0, total: 0, items: [] };
     if (tipo === "Material") reembolsosTrabajo[key].materiales += monto;
     else reembolsosTrabajo[key].nomina += monto;
@@ -5392,6 +5511,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
   const listaReembolsos = Object.values(reembolsosTrabajo);
+  const listaReposiciones = Object.values(reposicionesTrabajo);
 
   // gananciaParaReparto (= total − materiales − mano de obra, con los TOTALES completos) YA tiene descontado
   // lo que pagaron los socios de su bolsillo — por eso se divide 50/50 directo, SIN restar el reembolso otra vez.
@@ -5614,6 +5734,30 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           </table>
         )}
       </div>
+
+      {listaReposiciones.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: GREEN }}>Reposición de caja chica (ya cubierto con el pago del cliente)</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <Th>Cuenta</Th>
+                <Th>Concepto</Th>
+                <Th right>Monto</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaReposiciones.map((r) => (
+                <tr key={r.nombre}>
+                  <Td>{r.nombre}</Td>
+                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
+                  <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>IV. Balance final, reembolsos y distribución</div>
