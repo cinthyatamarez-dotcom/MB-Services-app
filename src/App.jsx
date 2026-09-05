@@ -2654,6 +2654,8 @@ function Materiales({ data, update, onViewPhoto }) {
   const [editandoMaterialId, setEditandoMaterialId] = useState(null);
   const [editMaterialForm, setEditMaterialForm] = useState({});
   const [mostrarGaleria, setMostrarGaleria] = useState(false);
+  const [mostrarLimpiezaCliente, setMostrarLimpiezaCliente] = useState(false);
+  const [confirmarLimpiezaTexto, setConfirmarLimpiezaTexto] = useState("");
   // scan: { status: 'loading'|'review'|'error', foto, tienda, fecha, items:[], trabajoId, pagadoPor, empleadoPagadorId, cuentaId, errorMsg }
 
   // Agrupa los materiales por facturaId (los que vinieron juntos de un escaneo) — los sueltos quedan cada uno en su propio "grupo" de 1.
@@ -2828,6 +2830,71 @@ function Materiales({ data, update, onViewPhoto }) {
   return (
     <div>
       <SectionTitle sub="Compras de materiales, asignadas a cada trabajo — con foto de la factura">Materiales</SectionTitle>
+
+      {(() => {
+        const materialesCliente = data.materiales.filter((m) => m.pagadoPor === "cliente");
+        if (materialesCliente.length === 0) return null;
+        return (
+          <div className="card p-3 mb-4" style={{ borderColor: "#E0B4B4", background: "#FBEAEA" }}>
+            <div className="flex justify-between items-center flex-wrap gap-2">
+              <div className="text-[12px]" style={{ color: "#8A2E2E" }}>
+                Tienes <b>{materialesCliente.length}</b> {materialesCliente.length === 1 ? "material viejo marcado" : "materiales viejos marcados"} como "pagado por el cliente" — ya no se usa esa opción.
+              </div>
+              <button
+                className="text-[11px] underline"
+                style={{ color: "#8A2E2E" }}
+                onClick={() => { setMostrarLimpiezaCliente(!mostrarLimpiezaCliente); setConfirmarLimpiezaTexto(""); }}
+              >
+                {mostrarLimpiezaCliente ? "Ocultar lista" : "Ver y eliminarlos"}
+              </button>
+            </div>
+            {mostrarLimpiezaCliente && (
+              <div className="mt-3 pt-3" style={{ borderTop: "1px dashed #E0B4B4" }}>
+                <div className="space-y-1 mb-3">
+                  {materialesCliente.map((m) => {
+                    const trab = data.trabajos.find((t) => t.id === m.trabajoId);
+                    return (
+                      <div key={m.id} className="flex justify-between text-[12px]" style={{ color: "#8A2E2E" }}>
+                        <span>{fmtDate(m.fecha)} · {m.descripcion}{trab ? ` · ${trab.apodo || trab.nombre}` : ""}</span>
+                        <span className="mono">{money(materialNeto(m))}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-[12px] font-medium mb-3" style={{ color: "#8A2E2E" }}>
+                  <span>Total a eliminar</span>
+                  <span className="mono">{money(materialesCliente.reduce((s, m) => s + materialNeto(m), 0))}</span>
+                </div>
+                <p className="text-[11px] mb-1.5" style={{ color: "#8A2E2E" }}>
+                  Esto no se puede deshacer. Escribe <b>ELIMINAR</b> para confirmar:
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    className="ledger-input text-xs flex-1"
+                    value={confirmarLimpiezaTexto}
+                    onChange={(e) => setConfirmarLimpiezaTexto(e.target.value)}
+                    placeholder="ELIMINAR"
+                  />
+                  <button
+                    className="text-[11px] px-3 py-1.5 border disabled:opacity-40"
+                    style={{ borderColor: "#A13D2E", color: "#A13D2E" }}
+                    disabled={confirmarLimpiezaTexto.trim().toUpperCase() !== "ELIMINAR"}
+                    onClick={() => {
+                      update((d) => {
+                        d.materiales = d.materiales.filter((m) => m.pagadoPor !== "cliente");
+                      });
+                      setMostrarLimpiezaCliente(false);
+                      setConfirmarLimpiezaTexto("");
+                    }}
+                  >
+                    Eliminar los {materialesCliente.length} materiales
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {!form && !scan && (
         <div className="flex flex-wrap gap-2 mb-4">
