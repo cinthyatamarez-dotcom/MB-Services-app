@@ -525,7 +525,9 @@ function calcTrabajo(t, data) {
   const reposicionCajaChicaMap = {};
   const acumularReembolso = (item, tipoLabel, montoOverride) => {
     const pagador = item.pagadoPor || "empresa";
-    if (pagador === "cliente" || pagador === "sindefinir") return;
+    // La marca "reembolsado" solo tiene sentido si a una persona se le debía devolver dinero.
+    // Si ahora dice que lo pagó la empresa, esa marca vieja ya no aplica (se ignora).
+    if (pagador === "cliente" || pagador === "sindefinir" || (item.reembolsado && pagador !== "empresa")) return;
     // Si el gasto es de la empresa pero no quedó guardada la cuenta exacta (dato viejo/incompleto),
     // se asume que salió de la cuenta principal (donde cae el pago del cliente), que es lo normal.
     const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (pagador === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
@@ -5053,7 +5055,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const reembolsosPorSocio = {}; // key: socio.id, o "cuenta:ID" si pagó la empresa desde una cuenta reembolsable → { nombre, monto, esCuenta }
   const acumularReembolsoSocio = (item) => {
     const pagador = item.pagadoPor || "empresa";
-    if (pagador === "cliente" || pagador === "sindefinir") return;
+    if (pagador === "cliente" || pagador === "sindefinir" || (item.reembolsado && pagador !== "empresa")) return;
     // Si el gasto es de la empresa pero no quedó guardada la cuenta exacta (dato viejo/incompleto),
     // se asume que salió de la cuenta principal (donde cae el pago del cliente), que es lo normal.
     const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (pagador === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
@@ -5721,7 +5723,9 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const reposicionesTrabajo = {};
   const acumular = (item, tipo) => {
     const p = item.pagadoPor || "empresa";
-    if (p === "cliente" || p === "sindefinir" || item.reembolsado) return;
+    // La marca "reembolsado" solo tiene sentido si a alguien se le debía devolver dinero.
+    // Si ahora dice que lo pagó la empresa, esa marca vieja ya no aplica (se ignora).
+    if (p === "cliente" || p === "sindefinir" || (item.reembolsado && p !== "empresa")) return;
     const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (p === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
     const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
     if (cuentaPago?.esCuentaAntesSociedad) {
@@ -5955,9 +5959,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
         </div>
       )}
 
-      {listaReembolsos.length > 0 && (
-        <div className="mb-6">
-          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#B26A00" }}>Reembolso (compró material o pagó nómina de su cuenta personal)</div>
+      <div className="mb-6">
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#B26A00" }}>Reembolso (compró material o pagó nómina de su cuenta personal)</div>
+        {listaReembolsos.length === 0 ? (
+          <div className="text-sm" style={{ color: "#888" }}>— nadie pagó de su cuenta personal en este trabajo —</div>
+        ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr>
@@ -5976,8 +5982,8 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="mb-6">
         <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
