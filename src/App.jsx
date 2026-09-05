@@ -1695,7 +1695,7 @@ function Bitacora({ data, update }) {
         fecha: d.bitacora.find((x) => x.id === bitId).fecha,
         monto: Number(pagoForm.monto),
         pagadoPor: pagoForm.pagadoPor || "empresa",
-        cuentaId: pagoForm.cuentaId || "",
+        cuentaId: pagoForm.cuentaId || (((pagoForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : ""),
         esGastoEmpresa: !!pagoForm.esGastoEmpresa,
         formaPago: pagoForm.formaPago || "efectivo",
         numeroCheque: pagoForm.formaPago === "cheque" ? (pagoForm.numeroCheque || "") : "",
@@ -2121,7 +2121,7 @@ function Bitacora({ data, update }) {
                                   p.empleadoId = pagoEditForm.empleadoId;
                                   p.monto = Number(pagoEditForm.monto);
                                   p.pagadoPor = pagoEditForm.pagadoPor || "empresa";
-                                  p.cuentaId = pagoEditForm.cuentaId || "";
+                                  p.cuentaId = pagoEditForm.cuentaId || (((pagoEditForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : "");
                                   p.esGastoEmpresa = !!pagoEditForm.esGastoEmpresa;
                                   p.formaPago = pagoEditForm.formaPago || "efectivo";
                                   p.numeroCheque = pagoEditForm.formaPago === "cheque" ? (pagoEditForm.numeroCheque || "") : "";
@@ -2272,7 +2272,7 @@ function Nomina({ data, update }) {
         fecha: payForm.fecha || todayISO(),
         monto: Number(payForm.monto),
         pagadoPor: payForm.pagadoPor || "empresa",
-        cuentaId: payForm.cuentaId || "",
+        cuentaId: payForm.cuentaId || (((payForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : ""),
         esGastoEmpresa: !!payForm.esGastoEmpresa,
         formaPago: payForm.formaPago || "efectivo",
         numeroCheque: payForm.formaPago === "cheque" ? (payForm.numeroCheque || "") : "",
@@ -2568,7 +2568,7 @@ function Nomina({ data, update }) {
                           pago.monto = Number(editForm.monto);
                           pago.fecha = editForm.fecha;
                           pago.pagadoPor = editForm.pagadoPor || "empresa";
-                          pago.cuentaId = editForm.cuentaId || "";
+                          pago.cuentaId = editForm.cuentaId || (((editForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : "");
                           pago.esGastoEmpresa = !!editForm.esGastoEmpresa;
                           pago.formaPago = editForm.formaPago || "efectivo";
                           pago.numeroCheque = editForm.formaPago === "cheque" ? (editForm.numeroCheque || "") : "";
@@ -2715,7 +2715,7 @@ function Materiales({ data, update, onViewPhoto }) {
         monto: Number(form.monto),
         fecha: form.fecha || todayISO(),
         pagadoPor: pagadoPorFinal,
-        cuentaId: form.cuentaId || "",
+        cuentaId: form.cuentaId || ((pagadoPorFinal === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : ""),
         esGastoEmpresa: !!form.esGastoEmpresa,
         antesSociedad: !!form.antesSociedad,
         numeroCheque: form.numeroCheque || "",
@@ -2803,7 +2803,7 @@ function Materiales({ data, update, onViewPhoto }) {
           monto: Number(it.importe) || 0,
           fecha: scan.fecha || todayISO(),
           pagadoPor: pagadoPorFinal,
-          cuentaId: scan.cuentaId || "",
+          cuentaId: scan.cuentaId || ((pagadoPorFinal === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : ""),
           esGastoEmpresa: !!scan.esGastoEmpresa,
           antesSociedad: !!scan.antesSociedad,
           reembolsado: false,
@@ -3259,7 +3259,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                 const item = d.materiales.find((x) => x.id === m.id);
                                 item.trabajoId = editMaterialForm.trabajoId || "";
                                 item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
-                                item.cuentaId = editMaterialForm.cuentaId || "";
+                                item.cuentaId = editMaterialForm.cuentaId || (((editMaterialForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : "");
                                 item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
                                 item.antesSociedad = !!editMaterialForm.antesSociedad;
                                 item.numeroCheque = editMaterialForm.numeroCheque || "";
@@ -3415,7 +3415,7 @@ function Materiales({ data, update, onViewPhoto }) {
                                   const item = d.materiales.find((x) => x.id === it.id);
                                   item.trabajoId = editMaterialForm.trabajoId || "";
                                   item.pagadoPor = editMaterialForm.pagadoPor === "empleado" ? `empleado:${editMaterialForm.empleadoPagadorId}` : (editMaterialForm.pagadoPor || "empresa");
-                                  item.cuentaId = editMaterialForm.cuentaId || "";
+                                  item.cuentaId = editMaterialForm.cuentaId || (((editMaterialForm.pagadoPor || "empresa") === "empresa") ? (data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id || "") : "");
                                   item.esGastoEmpresa = !!editMaterialForm.esGastoEmpresa;
                                 item.antesSociedad = !!editMaterialForm.antesSociedad;
                                   item.numeroCheque = editMaterialForm.numeroCheque || "";
