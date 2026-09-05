@@ -4040,11 +4040,27 @@ function Cuentas({ data, update, onViewPhoto }) {
                             </button>
                           )}
                         </div>
-                        <div className="text-[11px] text-[#7A7263]">
-                          {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
-                          {ing.concepto ? ` · ${ing.concepto}` : ""}
-                          {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
-                          {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
+                        <div className="text-[11px] text-[#7A7263] flex items-center gap-1.5 flex-wrap">
+                          <span>
+                            {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
+                            {ing.concepto ? ` · ${ing.concepto}` : ""}
+                            {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
+                            {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
+                          </span>
+                          <select
+                            className="text-[9px] uppercase px-1.5 py-0.5 border"
+                            style={{
+                              background: ing.repartoEstado === "retirado" ? "#E1EEE6" : ing.repartoEstado === "pagado" ? "#DCE9F5" : "#FBF3E3",
+                              color: ing.repartoEstado === "retirado" ? "#1E6B3E" : ing.repartoEstado === "pagado" ? "#2C5A8A" : "#8A6416",
+                              borderColor: "transparent",
+                            }}
+                            value={ing.repartoEstado || "pendiente"}
+                            onChange={(e) => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.repartoEstado = e.target.value; })}
+                          >
+                            <option value="pendiente">Pendiente</option>
+                            <option value="pagado">Pagado</option>
+                            <option value="retirado">Repartido entre socios y retirado</option>
+                          </select>
                         </div>
                         {(ing.fotosInvoice?.length > 0) && (
                           <div className="flex flex-wrap gap-1 mt-1">
