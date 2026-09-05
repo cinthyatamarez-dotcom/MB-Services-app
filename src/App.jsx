@@ -2172,13 +2172,13 @@ function Bitacora({ data, update }) {
                   </select>
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={pagoForm.monto || ""} onChange={(e) => setPagoForm({ ...pagoForm, monto: e.target.value })} />
                   <select className="ledger-input text-xs" value={pagoForm.pagadoPor || "empresa"} onChange={(e) => { const v = e.target.value; const cDef = data.cuentas.find((c) => c.esCuentaAntesSociedad)?.id; setPagoForm({ ...pagoForm, pagadoPor: v, cuentaId: (v === "empresa" && !pagoForm.cuentaId && cDef) ? cDef : pagoForm.cuentaId }); }}>
-                    <option value="empresa">Pagado desde cuenta de {data.empresaNombre}</option>
+                    <option value="empresa">Pagado desde cuenta {data.cuentas.find((c) => c.esCuentaAntesSociedad)?.nombre || data.empresaNombre}</option>
                     <option value="sindefinir">Aún no se sabe (se define cuando se pague)</option>
                     <option value="cliente">Lo pagó el cliente directamente (no afecta la ganancia)</option>
                     {data.socios.map((s) => <option key={s.id} value={s.id}>Pagado por {s.nombre} (a reembolsar)</option>)}
                   </select>
                   <select className="ledger-input text-xs" value={pagoForm.cuentaId || ""} onChange={(e) => setPagoForm({ ...pagoForm, cuentaId: e.target.value })}>
-                    <option value="">Cuenta bancaria…</option>
+                    <option value="">Cuenta bancaria… (si fue una cuenta distinta)</option>
                     {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                   </select>
                         {!!data.cuentas.find((c) => c.id === pagoForm.cuentaId)?.esPersonal && (
