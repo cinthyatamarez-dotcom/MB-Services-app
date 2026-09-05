@@ -526,7 +526,9 @@ function calcTrabajo(t, data) {
   const acumularReembolso = (item, tipoLabel, montoOverride) => {
     const pagador = item.pagadoPor || "empresa";
     if (pagador === "cliente" || pagador === "sindefinir") return;
-    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    // Si el gasto es de la empresa pero no quedó guardada la cuenta exacta (dato viejo/incompleto),
+    // se asume que salió de la cuenta principal (donde cae el pago del cliente), que es lo normal.
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (pagador === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
     const montoFinal = montoOverride !== undefined ? montoOverride : Number(item.monto);
     if (cuentaPago?.esCuentaAntesSociedad) {
       // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
@@ -5052,7 +5054,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const acumularReembolsoSocio = (item) => {
     const pagador = item.pagadoPor || "empresa";
     if (pagador === "cliente" || pagador === "sindefinir") return;
-    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    // Si el gasto es de la empresa pero no quedó guardada la cuenta exacta (dato viejo/incompleto),
+    // se asume que salió de la cuenta principal (donde cae el pago del cliente), que es lo normal.
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (pagador === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
     if (cuentaPago?.esCuentaAntesSociedad) return; // esta cuenta nunca se reembolsa
     const socio = data.socios.find((s) => s.id === pagador);
     const esEmpresa = !socio;
@@ -5076,7 +5080,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   const materialesPagadosPorEmpresa = materialesT.filter((m) => {
     const p = m.pagadoPor || "empresa";
     if (p === "cliente" || p === "sindefinir") return true;
-    const cuentaPago = data.cuentas.find((c) => c.id === m.cuentaId);
+    const cuentaPago = data.cuentas.find((c) => c.id === m.cuentaId) || (p === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
     return !!cuentaPago?.esCuentaAntesSociedad;
   }).reduce((s, m) => s + Number(m.monto || 0), 0);
 
@@ -5718,7 +5722,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const acumular = (item, tipo) => {
     const p = item.pagadoPor || "empresa";
     if (p === "cliente" || p === "sindefinir" || item.reembolsado) return;
-    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+    const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId) || (p === "empresa" ? data.cuentas.find((c) => c.esCuentaAntesSociedad) : undefined);
     const monto = tipo === "Material" ? materialNeto(item) : Number(item.monto);
     if (cuentaPago?.esCuentaAntesSociedad) {
       // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
@@ -5944,6 +5948,30 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                   <Td>{r.nombre}</Td>
                   <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
                   <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {listaReembolsos.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#B26A00" }}>Reembolso (compró material o pagó nómina de su cuenta personal)</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <Th>Persona / cuenta</Th>
+                <Th>Concepto</Th>
+                <Th right>Monto</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaReembolsos.map((r) => (
+                <tr key={r.nombre}>
+                  <Td>{r.nombre}</Td>
+                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
+                  <Td right bold><span style={{ color: "#B26A00" }}>{money(r.total)}</span></Td>
                 </tr>
               ))}
             </tbody>
