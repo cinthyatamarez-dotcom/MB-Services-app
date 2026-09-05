@@ -5523,14 +5523,14 @@ function CuentaMovimientosModal({ cuenta, data, update, onClose }) {
       {movimientos.map((m, i) => (
         <div key={i} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
           <div className="flex justify-between text-base">
-            <span className="pr-2" style={(m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? { textDecoration: "line-through", color: "#9A9284" } : undefined}>
+            <span className="pr-2" style={(m.esIngreso && m.repartoEstado === "retirado") || (m.esTransferAntes && m.confirmado) ? { textDecoration: "line-through", color: "#9A9284" } : undefined}>
               {m.tipo}{m.detalle ? ` — ${m.detalle}` : ""}
             </span>
             <span
               className="whitespace-nowrap font-semibold"
               style={{
-                color: (m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? "#9A9284" : (m.signo > 0 ? "#1E6B3E" : "#A13D2E"),
-                textDecoration: (m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? "line-through" : undefined,
+                color: (m.esIngreso && m.repartoEstado === "retirado") || (m.esTransferAntes && m.confirmado) ? "#9A9284" : (m.signo > 0 ? "#1E6B3E" : "#A13D2E"),
+                textDecoration: (m.esIngreso && m.repartoEstado === "retirado") || (m.esTransferAntes && m.confirmado) ? "line-through" : undefined,
               }}
             >
               {m.signo > 0 ? "+" : "-"}{money(m.monto)}
@@ -5539,32 +5539,26 @@ function CuentaMovimientosModal({ cuenta, data, update, onClose }) {
           <div className="text-xs flex items-center gap-2" style={{ color: "#888" }}>
             <span>{fmtDate(m.fecha)}{m.formaPago ? ` · ${m.formaPago}` : ""}</span>
             {m.esIngreso && (
-              <>
-                <span
-                  className="text-[10px] uppercase px-1.5 py-0.5"
-                  style={{
-                    background: m.repartoEstado === "pagado" ? "#E1EEE6" : "#FBF3E3",
-                    color: m.repartoEstado === "pagado" ? "#1E6B3E" : "#8A6416",
-                  }}
-                >
-                  {m.repartoEstado === "pagado" ? "Pagado a socios" : "Pendiente de repartir"}
-                </span>
-                {update && (
-                  <button
-                    type="button"
-                    className="no-print text-[10px] underline"
-                    style={{ color: "#7A7263" }}
-                    onClick={() =>
-                      update((d) => {
-                        const ing = d.ingresos.find((x) => x.id === m.id);
-                        ing.repartoEstado = ing.repartoEstado === "pagado" ? "pendiente" : "pagado";
-                      })
-                    }
-                  >
-                    Marcar como {m.repartoEstado === "pagado" ? "pendiente" : "pagado a socios"}
-                  </button>
-                )}
-              </>
+              <select
+                className="no-print text-[10px] uppercase px-1.5 py-0.5 border"
+                style={{
+                  background: m.repartoEstado === "retirado" ? "#E1EEE6" : m.repartoEstado === "pagado" ? "#DCE9F5" : "#FBF3E3",
+                  color: m.repartoEstado === "retirado" ? "#1E6B3E" : m.repartoEstado === "pagado" ? "#2C5A8A" : "#8A6416",
+                  borderColor: "transparent",
+                }}
+                value={m.repartoEstado || "pendiente"}
+                onChange={(e) =>
+                  update &&
+                  update((d) => {
+                    const ing = d.ingresos.find((x) => x.id === m.id);
+                    ing.repartoEstado = e.target.value;
+                  })
+                }
+              >
+                <option value="pendiente">Pendiente</option>
+                <option value="pagado">Pagado</option>
+                <option value="retirado">Repartido entre socios y retirado</option>
+              </select>
             )}
             {m.esTransferAntes && (
               <>
