@@ -4192,7 +4192,7 @@ function Cuentas({ data, update, onViewPhoto }) {
           )}
         </div>
       </div>
-      {cuentaModal && <CuentaMovimientosModal cuenta={cuentaModal} data={data} onClose={() => setCuentaModal(null)} />}
+      {cuentaModal && <CuentaMovimientosModal cuenta={cuentaModal} data={data} update={update} onClose={() => setCuentaModal(null)} />}
     </div>
   );
 }
@@ -5455,7 +5455,7 @@ function BitacoraTrabajoModal({ trabajo, data, onClose }) {
   );
 }
 
-function CuentaMovimientosModal({ cuenta, data, onClose }) {
+function CuentaMovimientosModal({ cuenta, data, update, onClose }) {
   const ingresosC = data.ingresos.filter((i) => i.cuentaId === cuenta.id);
   const transfSalida = data.transferencias.filter((t) => t.deCuentaId === cuenta.id);
   const transfEntrada = data.transferencias.filter((t) => t.aCuentaId === cuenta.id);
@@ -5463,9 +5463,9 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
   const nominaC = data.nomina.filter((n) => n.cuentaId === cuenta.id);
 
   const movimientos = [
-    ...ingresosC.map((i) => ({ fecha: i.fecha, tipo: "Ingreso de cliente", detalle: (i.concepto || "") + (i.numeroInvoice ? ` (invoice #${i.numeroInvoice})` : "") + (i.fechaFacturaEnviada ? ` · enviado ${fmtDate(i.fechaFacturaEnviada)}` : "") + (i.antesSociedad ? " · Antes de la sociedad" : ""), monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
-    ...transfEntrada.map((t) => ({ fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
-    ...transfSalida.map((t) => ({ fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...ingresosC.map((i) => ({ id: i.id, esIngreso: true, repartoEstado: i.repartoEstado || "pendiente", fecha: i.fecha, tipo: "Ingreso de cliente", detalle: (i.concepto || "") + (i.numeroInvoice ? ` (invoice #${i.numeroInvoice})` : "") + (i.fechaFacturaEnviada ? ` · enviado ${fmtDate(i.fechaFacturaEnviada)}` : "") + (i.antesSociedad ? " · Antes de la sociedad" : ""), monto: i.monto, signo: 1, formaPago: formaPagoTextoStandalone(i.formaPago, i.numeroCheque) })),
+    ...transfEntrada.map((t) => ({ id: t.id, esTransferAntes: !!t.antesSociedad, confirmado: !!t.confirmado, fecha: t.fecha, tipo: "Transferencia recibida", detalle: `de ${data.cuentas.find((c) => c.id === t.deCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: 1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
+    ...transfSalida.map((t) => ({ id: t.id, esTransferAntes: !!t.antesSociedad, confirmado: !!t.confirmado, fecha: t.fecha, tipo: "Transferencia enviada", detalle: `a ${data.cuentas.find((c) => c.id === t.aCuentaId)?.nombre || "—"}` + (t.concepto ? ` · ${t.concepto}` : "") + (t.antesSociedad ? " · Antes de la sociedad" : ""), monto: t.monto, signo: -1, formaPago: formaPagoTextoStandalone(t.formaPago, t.numeroCheque) })),
     ...materialesC.map((m) => ({
       fecha: m.fecha,
       tipo: "Material",
@@ -5523,12 +5523,78 @@ function CuentaMovimientosModal({ cuenta, data, onClose }) {
       {movimientos.map((m, i) => (
         <div key={i} className="py-1.5" style={{ borderBottom: "1px dashed #ccc" }}>
           <div className="flex justify-between text-base">
-            <span className="pr-2">{m.tipo}{m.detalle ? ` — ${m.detalle}` : ""}</span>
-            <span className="whitespace-nowrap font-semibold" style={{ color: m.signo > 0 ? "#1E6B3E" : "#A13D2E" }}>
+            <span className="pr-2" style={(m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? { textDecoration: "line-through", color: "#9A9284" } : undefined}>
+              {m.tipo}{m.detalle ? ` — ${m.detalle}` : ""}
+            </span>
+            <span
+              className="whitespace-nowrap font-semibold"
+              style={{
+                color: (m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? "#9A9284" : (m.signo > 0 ? "#1E6B3E" : "#A13D2E"),
+                textDecoration: (m.esIngreso && m.repartoEstado === "pagado") || (m.esTransferAntes && m.confirmado) ? "line-through" : undefined,
+              }}
+            >
               {m.signo > 0 ? "+" : "-"}{money(m.monto)}
             </span>
           </div>
-          <div className="text-xs" style={{ color: "#888" }}>{fmtDate(m.fecha)}{m.formaPago ? ` · ${m.formaPago}` : ""}</div>
+          <div className="text-xs flex items-center gap-2" style={{ color: "#888" }}>
+            <span>{fmtDate(m.fecha)}{m.formaPago ? ` · ${m.formaPago}` : ""}</span>
+            {m.esIngreso && (
+              <>
+                <span
+                  className="text-[10px] uppercase px-1.5 py-0.5"
+                  style={{
+                    background: m.repartoEstado === "pagado" ? "#E1EEE6" : "#FBF3E3",
+                    color: m.repartoEstado === "pagado" ? "#1E6B3E" : "#8A6416",
+                  }}
+                >
+                  {m.repartoEstado === "pagado" ? "Pagado a socios" : "Pendiente de repartir"}
+                </span>
+                {update && (
+                  <button
+                    type="button"
+                    className="no-print text-[10px] underline"
+                    style={{ color: "#7A7263" }}
+                    onClick={() =>
+                      update((d) => {
+                        const ing = d.ingresos.find((x) => x.id === m.id);
+                        ing.repartoEstado = ing.repartoEstado === "pagado" ? "pendiente" : "pagado";
+                      })
+                    }
+                  >
+                    Marcar como {m.repartoEstado === "pagado" ? "pendiente" : "pagado a socios"}
+                  </button>
+                )}
+              </>
+            )}
+            {m.esTransferAntes && (
+              <>
+                <span
+                  className="text-[10px] uppercase px-1.5 py-0.5"
+                  style={{
+                    background: m.confirmado ? "#E1EEE6" : "#FBF3E3",
+                    color: m.confirmado ? "#1E6B3E" : "#8A6416",
+                  }}
+                >
+                  {m.confirmado ? "Confirmado" : "Pendiente de confirmar"}
+                </span>
+                {update && (
+                  <button
+                    type="button"
+                    className="no-print text-[10px] underline"
+                    style={{ color: "#7A7263" }}
+                    onClick={() =>
+                      update((d) => {
+                        const tr = d.transferencias.find((x) => x.id === m.id);
+                        tr.confirmado = !tr.confirmado;
+                      })
+                    }
+                  >
+                    Marcar como {m.confirmado ? "pendiente" : "confirmado"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       ))}
       <div className="recibo-linea" />
