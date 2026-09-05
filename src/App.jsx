@@ -438,6 +438,12 @@ const PAPER = "#F3EEE4";
 const INK = "#1E2A38";
 const AMBER = "#C1783C";
 const GREEN = "#3B6E52";
+// Las dos entidades entre las que se reparte la GANANCIA (50/50) — reemplazan a Boris/David solo para este propósito.
+// Boris y David siguen existiendo normalmente en data.socios para todo lo demás (reembolsos personales, participación en trabajos, etc.)
+const ENTIDADES_REPARTO = [
+  { id: "entidad_mb_services", nombre: "MB Services" },
+  { id: "entidad_max_one", nombre: "Max One" },
+];
 const RED = "#A13D2E";
 const LINE = "#C9C1B0";
 
@@ -724,8 +730,8 @@ function Dashboard({ data }) {
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="card p-4">
-          <div className="stamp text-[13px] text-[#7A7263] mb-3">GANANCIA POR SOCIO</div>
-          {data.socios.map((s) => (
+          <div className="stamp text-[13px] text-[#7A7263] mb-3">GANANCIA POR ENTIDAD</div>
+          {ENTIDADES_REPARTO.map((s) => (
             <div key={s.id} className="flex justify-between items-center py-2 border-b last:border-0" style={{ borderColor: LINE }}>
               <span className="text-sm">{s.nombre}</span>
               <span className="mono text-sm font-semibold" style={{ color: totales.ganancia / 2 >= 0 ? GREEN : RED }}>
@@ -1182,7 +1188,7 @@ function Trabajos({ data, update, onViewPhoto }) {
                   )}
 
                   <div className="grid grid-cols-2 gap-2 pt-2">
-                    {data.socios.map((s) => (
+                    {ENTIDADES_REPARTO.map((s) => (
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
                         <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
@@ -4416,7 +4422,7 @@ function Reportes({ data, update }) {
                   )}
                   <Row label={c.tienePagoReal ? "Ganancia real (según lo pagado)" : "Ganancia total"} value={money(c.tienePagoReal ? c.gananciaReal : c.ganancia)} bold accent={c.ganancia >= 0 ? GREEN : RED} />
                   <div className="grid grid-cols-2 gap-2 my-2">
-                    {data.socios.map((s) => (
+                    {ENTIDADES_REPARTO.map((s) => (
                       <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
                         <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
                         <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
@@ -5390,29 +5396,23 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       </div>
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Liquidación final por socio</div>
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reparto de ganancia (50/50)</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <NavyTh>Socio</NavyTh>
-              <NavyTh right>Reembolso</NavyTh>
+              <NavyTh>Entidad</NavyTh>
               <NavyTh right>50% Ganancia</NavyTh>
-              <NavyTh right>Total a recibir</NavyTh>
               <NavyTh center>Estado</NavyTh>
             </tr>
           </thead>
           <tbody>
-            {data.socios.map((s) => {
+            {ENTIDADES_REPARTO.map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const reembolsoPropio = reembolsosPorSocio[s.id]?.monto || 0;
-              const totalSocio = cuotaBase + reembolsoPropio;
               return (
                 <tr key={s.id}>
                   <NavyTd>{s.nombre}</NavyTd>
-                  <NavyTd right>{money(reembolsoPropio)}</NavyTd>
-                  <NavyTd right>{money(cuotaBase)}</NavyTd>
-                  <NavyTd right bold>{money(totalSocio)}</NavyTd>
+                  <NavyTd right bold>{money(cuotaBase)}</NavyTd>
                   <NavyTd center>
                     <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
                       {pagado ? "Pagado" : hayPendiente ? "En espera" : "Pendiente"}
@@ -5425,30 +5425,21 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
-          {data.socios.map((s) => {
+          {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const reembolsoPropio = reembolsosPorSocio[s.id]?.monto || 0;
-            const totalSocio = cuotaBase + reembolsoPropio;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px]" style={{ color: "#6B6B6B" }}>De qué cuenta sale {money(totalSocio)}:</span>
-                <select className="ledger-input text-[11px] py-1" value={cuentaTemp} onChange={(e) => setCuentaTemp(e.target.value)}>
-                  <option value="">Elige la cuenta…</option>
-                  {data.cuentas.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(cuotaBase)}:</span>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
                 <button
-                  className="text-[10px] underline disabled:opacity-40"
+                  className="text-[10px] underline"
                   style={{ color: "#2E7D32" }}
-                  disabled={!cuentaTemp}
-                  onClick={() => marcarPagado(s.id, fechaTemp, cuentaTemp, totalSocio)}
+                  onClick={() => marcarPagado(s.id, fechaTemp)}
                 >
-                  Guardar y descontar
+                  Guardar
                 </button>
-                <button className="text-[10px] underline" style={{ color: "#6B6B6B" }} onClick={() => { setFechaEditando(null); setCuentaTemp(""); }}>Cancelar</button>
+                <button className="text-[10px] underline" style={{ color: "#6B6B6B" }} onClick={() => setFechaEditando(null)}>Cancelar</button>
               </div>
             ) : (
               <button
@@ -5457,7 +5448,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                 style={{ color: "#6B6B6B" }}
                 onClick={() => {
                   if (pagado) marcarPendiente(s.id);
-                  else { setFechaTemp(todayISO()); setCuentaTemp(""); setFechaEditando(s.id); }
+                  else { setFechaTemp(todayISO()); setFechaEditando(s.id); }
                 }}
               >
                 {s.nombre}: marcar como {pagado ? "pendiente" : "pagado"}
@@ -5466,6 +5457,28 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           })}
         </div>
       </div>
+
+      {(reembolsosPorSocio && Object.keys(reembolsosPorSocio).length > 0) && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reembolsos personales pendientes</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <NavyTh>Persona / cuenta</NavyTh>
+                <NavyTh right>Monto a reembolsar</NavyTh>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.values(reembolsosPorSocio).map((r, i) => (
+                <tr key={i}>
+                  <NavyTd>{r.nombre}</NavyTd>
+                  <NavyTd right bold>{money(r.monto)}</NavyTd>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div
         className="flex items-center gap-2.5 px-4 py-3 mb-6 text-sm"
@@ -5906,51 +5919,12 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                 <Td right bold>{money(c.manoDeObraPendiente)}</Td>
               </tr>
             )}
+            <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
+              <td className="text-sm font-bold py-2 px-2.5" colSpan={2} style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
+              <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(c.materiales + c.manoDeObra)}</td>
+            </tr>
           </tbody>
         </table>
-      </div>
-
-      <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>III. Deudas y retenciones pendientes</div>
-        {nominaT.filter((n) => n.estado === "pendiente").length === 0 && listaReembolsos.length === 0 ? (
-          <div className="text-sm" style={{ color: "#888" }}>— sin pendientes —</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Destinatario / Proveedor</Th>
-                <Th>Concepto</Th>
-                <Th center>Estado</Th>
-                <Th right>Monto retenido</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {nominaT.filter((n) => n.estado === "pendiente").map((n) => (
-                <tr key={n.id}>
-                  <Td>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "—"}</Td>
-                  <Td>Mano de obra pendiente</Td>
-                  <Td center><Pill estado="pendiente">Pendiente</Pill></Td>
-                  <Td right bold>{money(n.monto)}</Td>
-                </tr>
-              ))}
-              {listaReembolsos.map((r) => (
-                <tr key={r.nombre}>
-                  <Td>{r.nombre}</Td>
-                  <Td>
-                    {r.materiales > 0 && r.nomina > 0 ? "Gastos" : r.materiales > 0 ? "Materiales" : "Mano de obra"} (reembolso)
-                    {r.materiales > 0 && r.nomina > 0 && (
-                      <div className="text-[11px]" style={{ color: "#888" }}>
-                        (Mano de obra: {money(r.nomina)} + Materiales: {money(r.materiales)})
-                      </div>
-                    )}
-                  </Td>
-                  <Td center><Pill estado="pendiente">Pendiente</Pill></Td>
-                  <Td right bold>{money(r.total)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
 
       {listaReposiciones.length > 0 && (
@@ -5978,69 +5952,30 @@ function ReciboModal({ trabajo, data, update, onClose }) {
       )}
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>IV. Balance final, reembolsos y distribución</div>
-        <table style={{ width: "100%" }}>
-          <tbody>
-            <tr><td className="text-sm py-1.5">{c.tienePagoReal ? "Total recibido del cliente" : "Presupuesto (estimado)"}</td><td className="text-sm py-1.5 text-right font-bold">{money(gananciaBase)}</td></tr>
-            <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos materiales de la obra</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.materiales)}</td></tr>
-            <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>(−) Menos mano de obra (pagada + pendiente)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>-{money(c.manoDeObra)}</td></tr>
-            {c.manoDeObraPendiente > 0 && (
-              <tr>
-                <td className="text-[11px] py-1" style={{ color: "#888" }} colSpan={2}>
-                  (De esos ${c.manoDeObraPendiente.toFixed(2)}, todavía no se le han pagado a nadie — quedan pendientes)
-                </td>
-              </tr>
-            )}
-            <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
-              <td className="text-[14px] font-bold py-2.5 px-2.5" style={{ background: colorClaro, color: colorPrimario }}>GANANCIA NETA TOTAL (A REPARTIR)</td>
-              <td className="text-[14px] font-bold py-2.5 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(restoARepartir)}</td>
-            </tr>
-            <tr><td className="text-sm py-1.5" style={{ color: "#888" }}>Cuota base por socio (50% / 50%)</td><td className="text-sm py-1.5 text-right" style={{ color: "#888" }}>{money(cuotaBase)} c/u</td></tr>
-            {data.socios.map((s) => {
-              const reembolsoPropio = reembolsoDeSocio(s.id);
-              if (reembolsoPropio <= 0) return null;
-              const rb = reembolsosTrabajo[s.id];
-              return (
-                <tr key={s.id}>
-                  <td className="text-sm py-1.5" style={{ color: "#B26A00" }}>
-                    (+) Además, se le devuelve a {s.nombre} lo que puso de su bolsillo
-                    {rb && rb.materiales > 0 && rb.nomina > 0 && (
-                      <div className="text-[11px]" style={{ color: "#B29060" }}>
-                        (Mano de obra: {money(rb.nomina)} + Materiales: {money(rb.materiales)})
-                      </div>
-                    )}
-                  </td>
-                  <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>+{money(reembolsoPropio)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
+          <span className="text-[13px] font-bold uppercase" style={{ color: colorPrimario }}>Balance: Ganancia neta</span>
+          <span className="text-[16px] font-bold" style={{ color: colorPrimario }}>{money(restoARepartir)}</span>
+        </div>
       </div>
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>V. Distribución final de efectivo (a pagar a cada uno)</div>
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>V. Reparto de ganancia (50/50)</div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <Th>Socio</Th>
-              <Th right>Reembolso</Th>
+              <Th>Entidad</Th>
               <Th right>50% Ganancia</Th>
-              <Th right>Total a recibir</Th>
               <Th center>Estado</Th>
             </tr>
           </thead>
           <tbody>
-            {data.socios.map((s) => {
-              const reembolsoPropio = reembolsoDeSocio(s.id);
+            {ENTIDADES_REPARTO.map((s) => {
               const estado = repartoCierre[s.id];
               const pagado = !!estado?.pagado;
               return (
                 <tr key={s.id}>
                   <Td>{s.nombre}</Td>
-                  <Td right>{money(reembolsoPropio)}</Td>
-                  <Td right>{money(cuotaBase)}</Td>
-                  <Td right bold>{money(cuotaBase + reembolsoPropio)}</Td>
+                  <Td right bold>{money(cuotaBase)}</Td>
                   <Td center>
                     <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
                     {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
@@ -6051,30 +5986,21 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
-          {data.socios.map((s) => {
+          {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
-            const reembolsoPropio = reembolsoDeSocio(s.id);
-            const totalSocio = cuotaBase + reembolsoPropio;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px]" style={{ color: "#7A7263" }}>De qué cuenta sale {money(totalSocio)}:</span>
-                <select className="ledger-input text-[11px] py-1" value={cuentaTemp} onChange={(e) => setCuentaTemp(e.target.value)}>
-                  <option value="">Elige la cuenta…</option>
-                  {data.cuentas.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(cuotaBase)}:</span>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
                 <button
-                  className="text-[10px] underline disabled:opacity-40"
+                  className="text-[10px] underline"
                   style={{ color: GREEN }}
-                  disabled={!cuentaTemp}
-                  onClick={() => marcarPagadoCierre(s.id, fechaTemp, cuentaTemp, totalSocio)}
+                  onClick={() => marcarPagadoCierre(s.id, fechaTemp)}
                 >
-                  Guardar y descontar
+                  Guardar
                 </button>
-                <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => { setFechaEditando(null); setCuentaTemp(""); }}>Cancelar</button>
+                <button className="text-[10px] underline" style={{ color: "#7A7263" }} onClick={() => setFechaEditando(null)}>Cancelar</button>
               </div>
             ) : (
               <button
@@ -6083,7 +6009,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                 style={{ color: "#7A7263" }}
                 onClick={() => {
                   if (pagado) marcarPendienteCierre(s.id);
-                  else { setFechaTemp(todayISO()); setCuentaTemp(""); setFechaEditando(s.id); }
+                  else { setFechaTemp(todayISO()); setFechaEditando(s.id); }
                 }}
               >
                 {s.nombre}: marcar como {pagado ? "pendiente" : "pagado"}
