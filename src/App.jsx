@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   LayoutDashboard, Briefcase, Users, Package, Landmark, ArrowLeftRight,
-  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock, MapPin
+  ClipboardList, Plus, X, Check, Trash2, Loader2, Settings, Camera, ImageOff, Printer, Receipt, Sparkles, PenLine, Download, ShieldAlert, CalendarDays, Tag, Building2, Phone, Mail, Hash, Lock, Unlock, MapPin, FolderClosed
 } from "lucide-react";
 import { db, storage } from "./firebase";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
@@ -4344,9 +4344,20 @@ function Reportes({ data, update }) {
   const [draftNotas, setDraftNotas] = useState({});
   const [reciboTrabajo, setReciboTrabajo] = useState(null);
   const [pagosPersonalTrabajo, setPagosPersonalTrabajo] = useState(null);
+  const [mostrarCarpeta, setMostrarCarpeta] = useState(false);
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
+    .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
+    .sort((a, b) => {
+      const ra = data.reportes.find((r) => r.trabajoId === a.id);
+      const rb = data.reportes.find((r) => r.trabajoId === b.id);
+      return (rb?.fechaCierre || "") < (ra?.fechaCierre || "") ? -1 : 1;
+    });
+
+  const trabajosGuardados = [...data.trabajos]
+    .filter((t) => t.estado === "cerrado")
+    .filter((t) => data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4372,8 +4383,16 @@ function Reportes({ data, update }) {
     update((d) => {
       const existing = d.reportes.find((r) => r.trabajoId === trabajoId);
       const notas = draftNotas[trabajoId] ?? existing?.notas ?? "";
-      if (existing) existing.notas = notas;
-      else d.reportes.push({ id: uid(), trabajoId, fechaCierre: todayISO(), notas });
+      if (existing) { existing.notas = notas; existing.archivado = true; }
+      else d.reportes.push({ id: uid(), trabajoId, fechaCierre: todayISO(), notas, archivado: true });
+    });
+    setOpenId(null);
+  };
+
+  const sacarDeCarpeta = (trabajoId) => {
+    update((d) => {
+      const existing = d.reportes.find((r) => r.trabajoId === trabajoId);
+      if (existing) existing.archivado = false;
     });
   };
 
@@ -4516,6 +4535,52 @@ function Reportes({ data, update }) {
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="mt-6 pt-4" style={{ borderTop: `1px dashed ${LINE}` }}>
+        <button
+          className="text-[13px] flex items-center gap-2 font-medium"
+          style={{ color: "#7A7263" }}
+          onClick={() => setMostrarCarpeta(!mostrarCarpeta)}
+        >
+          <FolderClosed size={16} /> Reportes guardados ({trabajosGuardados.length})
+        </button>
+        {mostrarCarpeta && (
+          <div className="space-y-2 mt-3">
+            {trabajosGuardados.length === 0 && <Empty text="Todavía no has guardado ningún reporte en la carpeta." />}
+            {trabajosGuardados.map((t) => {
+              const c = calcTrabajo(t, data);
+              const reporte = data.reportes.find((r) => r.trabajoId === t.id);
+              return (
+                <div key={t.id} className="card p-3 flex justify-between items-center">
+                  <div>
+                    <div className="font-medium text-sm">{t.nombre}</div>
+                    <div className="text-[12px] text-[#7A7263]">
+                      {t.cliente} · cerrado {reporte?.fechaCierre ? fmtDate(reporte.fechaCierre) : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="mono text-sm font-semibold" style={{ color: c.ganancia >= 0 ? GREEN : RED }}>{money(c.ganancia)}</span>
+                    <button
+                      className="text-[11px] underline flex items-center gap-1"
+                      style={{ color: "#7A7263" }}
+                      onClick={() => setReciboTrabajo(t)}
+                    >
+                      <Receipt size={13} /> Ver recibo
+                    </button>
+                    <button
+                      className="text-[11px] underline"
+                      style={{ color: "#7A7263" }}
+                      onClick={() => sacarDeCarpeta(t.id)}
+                    >
+                      Sacar de la carpeta
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {reciboTrabajo && (
