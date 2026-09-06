@@ -5472,7 +5472,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           <thead>
             <tr>
               <NavyTh>Entidad</NavyTh>
-              <NavyTh right>50% Ganancia</NavyTh>
+              <NavyTh right>Reembolso</NavyTh>
+              <NavyTh right>Ganancia</NavyTh>
               <NavyTh center>Estado</NavyTh>
             </tr>
           </thead>
@@ -5483,7 +5484,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               return (
                 <tr key={s.id}>
                   <NavyTd>{s.nombre}</NavyTd>
-                  <NavyTd right bold>{money(cuotaBase)}</NavyTd>
+                  <NavyTd right>{money(totalReembolsos)}</NavyTd>
+                  <NavyTd right bold>{money(cuotaBase + totalReembolsos)}</NavyTd>
                   <NavyTd center>
                     <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
                       {pagado ? "Pagado" : hayPendiente ? "En espera" : "Pendiente"}
@@ -5501,7 +5503,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             const pagado = !!estado?.pagado;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(cuotaBase)}:</span>
+                <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(cuotaBase + totalReembolsos)}:</span>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
                 <button
                   className="text-[10px] underline"
@@ -6063,7 +6065,8 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <thead>
             <tr>
               <Th>Entidad</Th>
-              <Th right>50% Ganancia</Th>
+              <Th right>Reembolso</Th>
+              <Th right>Ganancia</Th>
               <Th center>Estado</Th>
             </tr>
           </thead>
@@ -6074,7 +6077,8 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               return (
                 <tr key={s.id}>
                   <Td>{s.nombre}</Td>
-                  <Td right bold>{money(cuotaBase)}</Td>
+                  <Td right>{money(totalReembolsosTrabajo)}</Td>
+                  <Td right bold>{money(cuotaBase + totalReembolsosTrabajo)}</Td>
                   <Td center>
                     <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
                     {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
@@ -6088,9 +6092,10 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
+            const totalConReembolso = cuotaBase + totalReembolsosTrabajo;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(cuotaBase)}:</span>
+                <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(totalConReembolso)}:</span>
                 <input type="date" className="ledger-input text-[11px] py-1" value={fechaTemp} onChange={(e) => setFechaTemp(e.target.value)} />
                 <button
                   className="text-[10px] underline"
