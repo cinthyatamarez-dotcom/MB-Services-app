@@ -462,9 +462,25 @@ function FontImport() {
       .stamp{font-family:'Special Elite',monospace;letter-spacing:.08em}
       .recibo-linea{border-bottom:2px dashed #333;margin:20px 0}
       @media print {
+        @page { size: auto; margin: 0.35in; }
         body * { visibility: hidden; }
         #recibo-print, #recibo-print * { visibility: visible; }
-        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; }
+        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; font-size: 11px !important; line-height: 1.25 !important; padding: 6px !important; }
+        #recibo-print .mb-6 { margin-bottom: 8px !important; }
+        #recibo-print .mb-4 { margin-bottom: 6px !important; }
+        #recibo-print .mb-3 { margin-bottom: 5px !important; }
+        #recibo-print .mb-2 { margin-bottom: 3px !important; }
+        #recibo-print .p-3 { padding: 5px !important; }
+        #recibo-print .py-2\\.5 { padding-top: 3px !important; padding-bottom: 3px !important; }
+        #recibo-print .py-2 { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .py-1\\.5 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print .py-1 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print td, #recibo-print th { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .text-\\[14px\\], #recibo-print .text-\\[16px\\] { font-size: 12px !important; }
+        #recibo-print .text-\\[13px\\] { font-size: 11px !important; }
+        #recibo-print .text-sm { font-size: 10.5px !important; }
+        #recibo-print .text-\\[11px\\], #recibo-print .text-xs { font-size: 9.5px !important; }
+        #recibo-print .text-\\[10px\\] { font-size: 8.5px !important; }
         .no-print { display: none !important; }
       }
     `}</style>
