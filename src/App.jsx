@@ -4544,11 +4544,13 @@ function Reportes({ data, update }) {
 
         <div>
           <div className="stamp text-[13px] mb-3" style={{ color: AMBER }}>CIERRE PERSONAL (CASHAPP / PROPINAS)</div>
-          {trabajosConPersonal.length === 0 && (
+          {trabajosConPersonal.filter(({ trabajo: t }) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal).length === 0 && (
             <Empty text="Aún no hay dinero registrado en cuentas personales (CashApp, propinas) ligado a un trabajo." />
           )}
           <div className="space-y-2">
-            {trabajosConPersonal.map(({ trabajo: t, total }) => (
+            {trabajosConPersonal
+              .filter(({ trabajo: t }) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
+              .map(({ trabajo: t, total }) => (
               <div key={t.id} className="card p-4 flex justify-between items-center">
                 <div>
                   <div className="font-medium text-sm">{t.apodo || t.nombre}</div>
@@ -4562,6 +4564,13 @@ function Reportes({ data, update }) {
                     onClick={() => setPagosPersonalTrabajo(t)}
                   >
                     <Receipt size={13} /> Ver reporte
+                  </button>
+                  <button
+                    className="text-[11px] underline flex items-center gap-1"
+                    style={{ color: "#7A7263" }}
+                    onClick={() => guardarEnPersonales(t.id)}
+                  >
+                    <FolderClosed size={13} /> Guardar
                   </button>
                 </div>
               </div>
