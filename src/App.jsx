@@ -4350,7 +4350,7 @@ function Reportes({ data, update }) {
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
-    .filter((t) => !t.pagoPersonal)
+    .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4360,7 +4360,6 @@ function Reportes({ data, update }) {
   const trabajosGuardados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
     .filter((t) => data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
-    .filter((t) => !t.pagoPersonal)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4369,7 +4368,7 @@ function Reportes({ data, update }) {
 
   const trabajosPersonalesCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
-    .filter((t) => t.pagoPersonal)
+    .filter((t) => data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4405,6 +4404,21 @@ function Reportes({ data, update }) {
     update((d) => {
       const existing = d.reportes.find((r) => r.trabajoId === trabajoId);
       if (existing) existing.archivado = false;
+    });
+  };
+
+  const guardarEnPersonales = (trabajoId) => {
+    update((d) => {
+      const existing = d.reportes.find((r) => r.trabajoId === trabajoId);
+      if (existing) existing.archivadoPersonal = true;
+      else d.reportes.push({ id: uid(), trabajoId, fechaCierre: todayISO(), notas: "", archivadoPersonal: true });
+    });
+  };
+
+  const sacarDePersonales = (trabajoId) => {
+    update((d) => {
+      const existing = d.reportes.find((r) => r.trabajoId === trabajoId);
+      if (existing) existing.archivadoPersonal = false;
     });
   };
 
@@ -4505,6 +4519,13 @@ function Reportes({ data, update }) {
                   />
                   <div className="flex gap-2 mt-3">
                     <button className="btn-primary" onClick={() => guardarNotas(t.id)}><Check size={14} /> Guardar reporte</button>
+                    <button
+                      className="text-sm flex items-center gap-1 px-3 border"
+                      style={{ borderColor: LINE, color: "#7A7263" }}
+                      onClick={() => guardarEnPersonales(t.id)}
+                    >
+                      <FolderClosed size={14} /> Guardar en personales
+                    </button>
                     <button
                       className="text-sm flex items-center gap-1 px-3 border"
                       style={{ borderColor: LINE }}
@@ -4612,7 +4633,7 @@ function Reportes({ data, update }) {
                 <div key={t.id} className="card p-3 flex justify-between items-center">
                   <div>
                     <div className="font-medium text-sm">{t.nombre}</div>
-                    <div className="text-[12px] text-[#7A7263]">{t.cliente} · pago personal</div>
+                    <div className="text-[12px] text-[#7A7263]">{t.cliente}</div>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="mono text-sm font-semibold" style={{ color: c.ganancia >= 0 ? GREEN : RED }}>{money(c.ganancia)}</span>
@@ -4622,6 +4643,13 @@ function Reportes({ data, update }) {
                       onClick={() => setReciboTrabajo(t)}
                     >
                       <Receipt size={13} /> Ver recibo
+                    </button>
+                    <button
+                      className="text-[11px] underline"
+                      style={{ color: "#7A7263" }}
+                      onClick={() => sacarDePersonales(t.id)}
+                    >
+                      Sacar de personales
                     </button>
                   </div>
                 </div>
