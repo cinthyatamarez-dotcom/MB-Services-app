@@ -4345,10 +4345,12 @@ function Reportes({ data, update }) {
   const [reciboTrabajo, setReciboTrabajo] = useState(null);
   const [pagosPersonalTrabajo, setPagosPersonalTrabajo] = useState(null);
   const [mostrarCarpeta, setMostrarCarpeta] = useState(false);
+  const [mostrarCarpetaPersonal, setMostrarCarpetaPersonal] = useState(false);
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
+    .filter((t) => !t.pagoPersonal)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4358,6 +4360,16 @@ function Reportes({ data, update }) {
   const trabajosGuardados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
     .filter((t) => data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
+    .filter((t) => !t.pagoPersonal)
+    .sort((a, b) => {
+      const ra = data.reportes.find((r) => r.trabajoId === a.id);
+      const rb = data.reportes.find((r) => r.trabajoId === b.id);
+      return (rb?.fechaCierre || "") < (ra?.fechaCierre || "") ? -1 : 1;
+    });
+
+  const trabajosPersonalesCerrados = [...data.trabajos]
+    .filter((t) => t.estado === "cerrado")
+    .filter((t) => t.pagoPersonal)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4574,6 +4586,42 @@ function Reportes({ data, update }) {
                       onClick={() => sacarDeCarpeta(t.id)}
                     >
                       Sacar de la carpeta
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 pt-4" style={{ borderTop: `1px dashed ${LINE}` }}>
+        <button
+          className="text-[13px] flex items-center gap-2 font-medium"
+          style={{ color: "#7A7263" }}
+          onClick={() => setMostrarCarpetaPersonal(!mostrarCarpetaPersonal)}
+        >
+          <FolderClosed size={16} /> Reportes personales ({trabajosPersonalesCerrados.length})
+        </button>
+        {mostrarCarpetaPersonal && (
+          <div className="space-y-2 mt-3">
+            {trabajosPersonalesCerrados.length === 0 && <Empty text="Todavía no hay trabajos personales cerrados." />}
+            {trabajosPersonalesCerrados.map((t) => {
+              const c = calcTrabajo(t, data);
+              return (
+                <div key={t.id} className="card p-3 flex justify-between items-center">
+                  <div>
+                    <div className="font-medium text-sm">{t.nombre}</div>
+                    <div className="text-[12px] text-[#7A7263]">{t.cliente} · pago personal</div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="mono text-sm font-semibold" style={{ color: c.ganancia >= 0 ? GREEN : RED }}>{money(c.ganancia)}</span>
+                    <button
+                      className="text-[11px] underline flex items-center gap-1"
+                      style={{ color: "#7A7263" }}
+                      onClick={() => setReciboTrabajo(t)}
+                    >
+                      <Receipt size={13} /> Ver recibo
                     </button>
                   </div>
                 </div>
