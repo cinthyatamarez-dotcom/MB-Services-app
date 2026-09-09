@@ -5206,7 +5206,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
   // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
   const nominaMassielPagada = data.nomina
-    .filter((n) => n.trabajoId === trabajo.id && n.estado === "pagado" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
+    .filter((n) => n.trabajoId === trabajo.id && n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
     .reduce((s, n) => s + Number(n.monto || 0), 0);
 
   // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
@@ -5909,7 +5909,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
   // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
   const nominaMassielPagada = nominaT
-    .filter((n) => n.estado === "pagado" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
+    .filter((n) => n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
     .reduce((s, n) => s + Number(n.monto || 0), 0);
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
