@@ -1083,6 +1083,7 @@ function Trabajos({ data, update, onViewPhoto }) {
                   </div>
                   <div className="text-[12px] text-[#7A7263]">
                     {t.apodo ? `${t.nombre} · ` : ""}{t.cliente}{t.managerCliente ? ` (${t.managerCliente})` : ""}
+                    {t.numeroInvoiceTrabajo && ` · Invoice #${t.numeroInvoiceTrabajo}`}
                     {t.direccion && (
                       <>
                         {" · "}
@@ -1377,6 +1378,15 @@ function Trabajos({ data, update, onViewPhoto }) {
                         type="date"
                         value={t.fechaFacturaEnviada || ""}
                         onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).fechaFacturaEnviada = e.target.value; })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#7A7263] block mb-0.5">Número de invoice</label>
+                      <input
+                        className="ledger-input text-xs"
+                        placeholder="Ej. 457496"
+                        value={t.numeroInvoiceTrabajo || ""}
+                        onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).numeroInvoiceTrabajo = e.target.value; })}
                       />
                     </div>
                   </div>
@@ -4067,11 +4077,29 @@ function Cuentas({ data, update, onViewPhoto }) {
           )}
           {data.ingresos.length > 0 && (
             <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${LINE}` }}>
-              {[...data.ingresos].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((ing) => {
+              {(() => {
+                const ordenados = [...data.ingresos].sort((a, b) => {
+                  const aPersonal = !!data.cuentas.find((c) => c.id === a.cuentaId)?.esPersonal;
+                  const bPersonal = !!data.cuentas.find((c) => c.id === b.cuentaId)?.esPersonal;
+                  if (aPersonal !== bPersonal) return aPersonal ? 1 : -1; // empresa primero, personales después
+                  return a.fecha < b.fecha ? 1 : -1;
+                });
+                return ordenados.map((ing, idx) => {
                 const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
+                const esPersonal = !!cuenta?.esPersonal;
+                const anterior = idx > 0 ? ordenados[idx - 1] : null;
+                const cuentaAnterior = anterior ? data.cuentas.find((c) => c.id === anterior.cuentaId) : null;
+                const cambioDeGrupo = idx === 0 || !!cuentaAnterior?.esPersonal !== esPersonal;
+                const encabezado = cambioDeGrupo ? (
+                  <div key={`grupo-${idx}`} className="stamp text-[11px] mt-3 mb-1" style={{ color: esPersonal ? AMBER : "#7A7263" }}>
+                    {esPersonal ? "CUENTAS PERSONALES" : "CUENTAS DE LA EMPRESA (MB SERVICES / MAX ONE)"}
+                  </div>
+                ) : null;
                 if (editandoIngresoId === ing.id) {
                   return (
-                    <div key={ing.id} className="flex items-center gap-1.5 text-[11px] py-1" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                    <React.Fragment key={ing.id}>
+                      {encabezado}
+                    <div className="flex items-center gap-1.5 text-[11px] py-1" style={{ borderBottom: `1px dashed ${LINE}` }}>
                       <span className="text-[#7A7263] shrink-0">{money(ing.monto)} · {fmtDate(ing.fecha)} → cuenta:</span>
                       <select
                         className="ledger-input text-xs flex-1"
@@ -4095,10 +4123,13 @@ function Cuentas({ data, update, onViewPhoto }) {
                       </button>
                       <button className="text-[11px] text-[#7A7263] px-1 shrink-0" onClick={() => setEditandoIngresoId(null)}>Cancelar</button>
                     </div>
+                    </React.Fragment>
                   );
                 }
                 return (
-                  <div key={ing.id} className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                  <React.Fragment key={ing.id}>
+                  {encabezado}
+                  <div className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
                     <div className="flex justify-between items-start gap-2">
                       <div className="text-[12px]">
                         <div className="font-medium">
@@ -4169,8 +4200,10 @@ function Cuentas({ data, update, onViewPhoto }) {
                       </div>
                     </div>
                   </div>
+                  </React.Fragment>
                 );
-              })}
+                });
+              })()}
             </div>
           )}
         </div>
