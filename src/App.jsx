@@ -4075,137 +4075,130 @@ function Cuentas({ data, update, onViewPhoto }) {
               </div>
             </div>
           )}
-          {data.ingresos.length > 0 && (
-            <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px dashed ${LINE}` }}>
-              {(() => {
-                const ordenados = [...data.ingresos].sort((a, b) => {
-                  const aPersonal = !!data.cuentas.find((c) => c.id === a.cuentaId)?.esPersonal;
-                  const bPersonal = !!data.cuentas.find((c) => c.id === b.cuentaId)?.esPersonal;
-                  if (aPersonal !== bPersonal) return aPersonal ? 1 : -1; // empresa primero, personales después
-                  return a.fecha < b.fecha ? 1 : -1;
-                });
-                return ordenados.map((ing, idx) => {
-                const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
-                const esPersonal = !!cuenta?.esPersonal;
-                const anterior = idx > 0 ? ordenados[idx - 1] : null;
-                const cuentaAnterior = anterior ? data.cuentas.find((c) => c.id === anterior.cuentaId) : null;
-                const cambioDeGrupo = idx === 0 || !!cuentaAnterior?.esPersonal !== esPersonal;
-                const encabezado = cambioDeGrupo ? (
-                  <div key={`grupo-${idx}`} className="stamp text-[11px] mt-3 mb-1" style={{ color: esPersonal ? AMBER : "#7A7263" }}>
-                    {esPersonal ? "CUENTAS PERSONALES" : "CUENTAS DE LA EMPRESA (MB SERVICES / MAX ONE)"}
-                  </div>
-                ) : null;
-                if (editandoIngresoId === ing.id) {
-                  return (
-                    <React.Fragment key={ing.id}>
-                      {encabezado}
-                    <div className="flex items-center gap-1.5 text-[11px] py-1" style={{ borderBottom: `1px dashed ${LINE}` }}>
-                      <span className="text-[#7A7263] shrink-0">{money(ing.monto)} · {fmtDate(ing.fecha)} → cuenta:</span>
-                      <select
-                        className="ledger-input text-xs flex-1"
-                        value={cuentaEditTemp}
-                        onChange={(e) => setCuentaEditTemp(e.target.value)}
-                      >
-                        {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </select>
-                      <button
-                        className="text-[11px] px-2 py-1 border shrink-0"
-                        style={{ borderColor: GREEN, color: GREEN }}
-                        onClick={() => {
-                          update((d) => {
-                            const item = d.ingresos.find((x) => x.id === ing.id);
-                            if (item) item.cuentaId = cuentaEditTemp;
-                          });
-                          setEditandoIngresoId(null);
-                        }}
-                      >
-                        <Check size={12} />
-                      </button>
-                      <button className="text-[11px] text-[#7A7263] px-1 shrink-0" onClick={() => setEditandoIngresoId(null)}>Cancelar</button>
-                    </div>
-                    </React.Fragment>
-                  );
-                }
+          {data.ingresos.length > 0 && (() => {
+            const renderFila = (ing) => {
+              const cuenta = data.cuentas.find((c) => c.id === ing.cuentaId);
+              if (editandoIngresoId === ing.id) {
                 return (
-                  <React.Fragment key={ing.id}>
-                  {encabezado}
-                  <div className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="text-[12px]">
-                        <div className="font-medium">
-                          {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"}
-                          {ing.antesSociedad && (
-                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#FBE9D9", color: AMBER }}>Antes de la sociedad</span>
-                          )}
-                          {ing.estado === "pendiente" && (
-                            <button
-                              className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5"
-                              style={{ background: "#FBE9D9", color: AMBER }}
-                              title="Tocar para marcar como ya cobrado"
-                              onClick={() => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.estado = "cobrado"; })}
-                            >
-                              Pendiente de cobro · tocar cuando se cobre
-                            </button>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-[#7A7263] flex items-center gap-1.5 flex-wrap">
-                          <span>
-                            {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
-                            {ing.concepto ? ` · ${ing.concepto}` : ""}
-                            {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
-                            {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
-                          </span>
-                          <select
-                            className="text-[9px] uppercase px-1.5 py-0.5 border"
-                            style={{
-                              background: ing.repartoEstado === "retirado" ? "#E1EEE6" : ing.repartoEstado === "pagado" ? "#DCE9F5" : "#FBF3E3",
-                              color: ing.repartoEstado === "retirado" ? "#1E6B3E" : ing.repartoEstado === "pagado" ? "#2C5A8A" : "#8A6416",
-                              borderColor: "transparent",
-                            }}
-                            value={ing.repartoEstado || "pendiente"}
-                            onChange={(e) => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.repartoEstado = e.target.value; })}
+                  <div key={ing.id} className="flex items-center gap-1.5 text-[11px] py-1" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                    <span className="text-[#7A7263] shrink-0">{money(ing.monto)} · {fmtDate(ing.fecha)} → cuenta:</span>
+                    <select
+                      className="ledger-input text-xs flex-1"
+                      value={cuentaEditTemp}
+                      onChange={(e) => setCuentaEditTemp(e.target.value)}
+                    >
+                      {data.cuentas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                    </select>
+                    <button
+                      className="text-[11px] px-2 py-1 border shrink-0"
+                      style={{ borderColor: GREEN, color: GREEN }}
+                      onClick={() => {
+                        update((d) => {
+                          const item = d.ingresos.find((x) => x.id === ing.id);
+                          if (item) item.cuentaId = cuentaEditTemp;
+                        });
+                        setEditandoIngresoId(null);
+                      }}
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button className="text-[11px] text-[#7A7263] px-1 shrink-0" onClick={() => setEditandoIngresoId(null)}>Cancelar</button>
+                  </div>
+                );
+              }
+              return (
+                <div key={ing.id} className="py-1.5" style={{ borderBottom: `1px dashed ${LINE}` }}>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="text-[12px]">
+                      <div className="font-medium">
+                        {fmtDate(ing.fecha)} · {cuenta?.nombre || "—"}
+                        {ing.estado === "pendiente" && (
+                          <button
+                            className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5"
+                            style={{ background: "#FBE9D9", color: AMBER }}
+                            title="Tocar para marcar como ya cobrado"
+                            onClick={() => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.estado = "cobrado"; })}
                           >
-                            <option value="pendiente">Pendiente</option>
-                            <option value="pagado">Pagado</option>
-                            <option value="retirado">Repartido entre socios y retirado</option>
-                          </select>
-                        </div>
-                        {(ing.fotosInvoice?.length > 0) && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {ing.fotosInvoice.map((f, idx) => (
-                              <img
-                                key={idx}
-                                src={f}
-                                alt={`Invoice ${idx + 1}`}
-                                className="w-10 h-10 object-cover border cursor-pointer"
-                                style={{ borderColor: LINE }}
-                                onClick={() => onViewPhoto?.(f)}
-                              />
-                            ))}
-                          </div>
+                            Pendiente de cobro · tocar cuando se cobre
+                          </button>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="mono font-medium" style={{ color: GREEN }}>{money(ing.monto)}</span>
-                        <button
-                          className="text-[#7A7263]"
-                          title="Cambiar la cuenta de este ingreso"
-                          onClick={() => { setEditandoIngresoId(ing.id); setCuentaEditTemp(ing.cuentaId || ""); }}
+                      <div className="text-[11px] text-[#7A7263] flex items-center gap-1.5 flex-wrap">
+                        <span>
+                          {formaPagoTexto(ing.formaPago, ing.numeroCheque)}
+                          {ing.concepto ? ` · ${ing.concepto}` : ""}
+                          {ing.numeroInvoice ? ` · Invoice #${ing.numeroInvoice}` : ""}
+                          {ing.fechaFacturaEnviada ? ` · Invoice enviado: ${fmtDate(ing.fechaFacturaEnviada)}` : ""}
+                        </span>
+                        <select
+                          className="text-[9px] uppercase px-1.5 py-0.5 border"
+                          style={{
+                            background: ing.repartoEstado === "retirado" ? "#E1EEE6" : ing.repartoEstado === "pagado" ? "#DCE9F5" : "#FBF3E3",
+                            color: ing.repartoEstado === "retirado" ? "#1E6B3E" : ing.repartoEstado === "pagado" ? "#2C5A8A" : "#8A6416",
+                            borderColor: "transparent",
+                          }}
+                          value={ing.repartoEstado || "pendiente"}
+                          onChange={(e) => update((d) => { const item = d.ingresos.find((x) => x.id === ing.id); if (item) item.repartoEstado = e.target.value; })}
                         >
-                          <PenLine size={11} />
-                        </button>
-                        <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
-                          <Trash2 size={11} />
-                        </button>
+                          <option value="pendiente">Pendiente</option>
+                          <option value="pagado">Pagado</option>
+                          <option value="retirado">Repartido entre socios y retirado</option>
+                        </select>
                       </div>
+                      {(ing.fotosInvoice?.length > 0) && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {ing.fotosInvoice.map((f, idx) => (
+                            <img
+                              key={idx}
+                              src={f}
+                              alt={`Invoice ${idx + 1}`}
+                              className="w-10 h-10 object-cover border cursor-pointer"
+                              style={{ borderColor: LINE }}
+                              onClick={() => onViewPhoto?.(f)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="mono font-medium" style={{ color: GREEN }}>{money(ing.monto)}</span>
+                      <button
+                        className="text-[#7A7263]"
+                        title="Cambiar la cuenta de este ingreso"
+                        onClick={() => { setEditandoIngresoId(ing.id); setCuentaEditTemp(ing.cuentaId || ""); }}
+                      >
+                        <PenLine size={11} />
+                      </button>
+                      <button className="text-[#A13D2E]" onClick={() => update((d) => { d.ingresos = d.ingresos.filter((x) => x.id !== ing.id); })}>
+                        <Trash2 size={11} />
+                      </button>
                     </div>
                   </div>
-                  </React.Fragment>
-                );
-                });
-              })()}
-            </div>
-          )}
+                </div>
+              );
+            };
+
+            const porFecha = (a, b) => (a.fecha < b.fecha ? 1 : -1);
+            const antesSociedad = data.ingresos.filter((i) => i.antesSociedad).sort(porFecha);
+            const personales = data.ingresos.filter((i) => !i.antesSociedad && !!data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal).sort(porFecha);
+            const compania = data.ingresos.filter((i) => !i.antesSociedad && !data.cuentas.find((c) => c.id === i.cuentaId)?.esPersonal).sort(porFecha);
+
+            const Cuadro = ({ titulo, color, lista }) =>
+              lista.length > 0 && (
+                <div className="mt-3 p-3" style={{ border: `1px solid ${color}` }}>
+                  <div className="stamp text-[11px] mb-1" style={{ color }}>{titulo} ({lista.length})</div>
+                  <div>{lista.map(renderFila)}</div>
+                </div>
+              );
+
+            return (
+              <>
+                <Cuadro titulo="ANTES DE LA SOCIEDAD" color={AMBER} lista={antesSociedad} />
+                <Cuadro titulo="CUENTAS DE LA EMPRESA (MB SERVICES / MAX ONE)" color="#7A7263" lista={compania} />
+                <Cuadro titulo="CUENTAS PERSONALES" color="#8A6416" lista={personales} />
+              </>
+            );
+          })()}
         </div>
 
         <div className="card p-4">
@@ -5210,6 +5203,11 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
+  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
+  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
+  const nominaMassielPagada = data.nomina
+    .filter((n) => n.trabajoId === trabajo.id && n.estado === "pagado" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
+    .reduce((s, n) => s + Number(n.monto || 0), 0);
 
   // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
@@ -5592,6 +5590,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               <NavyTh>Entidad</NavyTh>
               <NavyTh right>Reembolso</NavyTh>
               <NavyTh right>Ganancia</NavyTh>
+              {nominaMassielPagada > 0 && <NavyTh right>Nómina Massiel</NavyTh>}
               <NavyTh right>Monto total a pagar</NavyTh>
               <NavyTh center>Estado</NavyTh>
             </tr>
@@ -5600,13 +5599,16 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             {ENTIDADES_REPARTO.map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const reembolsoEntidad = s.id === "entidad_mb_services" ? totalReembolsos : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad;
+              const esMbServices = s.id === "entidad_mb_services";
+              const reembolsoEntidad = esMbServices ? totalReembolsos : 0;
+              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
+              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
               return (
                 <tr key={s.id}>
                   <NavyTd>{s.nombre}</NavyTd>
                   <NavyTd right>{money(reembolsoEntidad)}</NavyTd>
                   <NavyTd right>{money(cuotaBase)}</NavyTd>
+                  {nominaMassielPagada > 0 && <NavyTd right>{money(nominaMassielEntidad)}</NavyTd>}
                   <NavyTd right bold>{money(montoEntidad)}</NavyTd>
                   <NavyTd center>
                     <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
@@ -5623,7 +5625,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos : 0);
+            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos + nominaMassielPagada : 0);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(montoEntidad)}:</span>
@@ -5904,6 +5906,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
+  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
+  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
+  const nominaMassielPagada = nominaT
+    .filter((n) => n.estado === "pagado" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
+    .reduce((s, n) => s + Number(n.monto || 0), 0);
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
   // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
@@ -6190,6 +6197,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               <Th>Entidad</Th>
               <Th right>Reembolso</Th>
               <Th right>Ganancia</Th>
+              {nominaMassielPagada > 0 && <Th right>Nómina Massiel</Th>}
               <Th right>Monto total a pagar</Th>
               <Th center>Estado</Th>
             </tr>
@@ -6198,13 +6206,16 @@ function ReciboModal({ trabajo, data, update, onClose }) {
             {ENTIDADES_REPARTO.map((s) => {
               const estado = repartoCierre[s.id];
               const pagado = !!estado?.pagado;
-              const reembolsoEntidad = s.id === "entidad_mb_services" ? totalReembolsosTrabajo : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad;
+              const esMbServices = s.id === "entidad_mb_services";
+              const reembolsoEntidad = esMbServices ? totalReembolsosTrabajo : 0;
+              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
+              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
               return (
                 <tr key={s.id}>
                   <Td>{s.nombre}</Td>
                   <Td right>{money(reembolsoEntidad)}</Td>
                   <Td right>{money(cuotaBase)}</Td>
+                  {nominaMassielPagada > 0 && <Td right>{money(nominaMassielEntidad)}</Td>}
                   <Td right bold>{money(montoEntidad)}</Td>
                   <Td center>
                     <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
@@ -6219,7 +6230,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
-            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo : 0);
+            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo + nominaMassielPagada : 0);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(totalConReembolso)}:</span>
