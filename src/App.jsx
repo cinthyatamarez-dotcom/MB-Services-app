@@ -5671,11 +5671,13 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       </div>
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reparto de ganancia (50/50)</div>
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>
+          {tipo === "personal" ? "Reparto de ganancia entre Boris y David (50/50)" : "Reparto de ganancia (50/50)"}
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <NavyTh>Entidad</NavyTh>
+              <NavyTh>{tipo === "personal" ? "Socio" : "Entidad"}</NavyTh>
               <NavyTh right>Ganancia</NavyTh>
               <NavyTh right>Reembolso</NavyTh>
               <NavyTh right>Monto total a pagar</NavyTh>
@@ -5683,11 +5685,10 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             </tr>
           </thead>
           <tbody>
-            {ENTIDADES_REPARTO.map((s) => {
+            {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const esMbServices = s.id === "entidad_mb_services";
-              const reembolsoEntidad = esMbServices ? totalReembolsos : 0;
+              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? totalReembolsos : 0);
               const montoEntidad = cuotaBase + reembolsoEntidad;
               return (
                 <tr key={s.id}>
@@ -5707,10 +5708,11 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
-          {ENTIDADES_REPARTO.map((s) => {
+          {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos : 0);
+            const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? totalReembolsos : 0);
+            const montoEntidad = cuotaBase + reembolsoEntidad;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(montoEntidad)}:</span>
@@ -5741,7 +5743,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
         </div>
       </div>
 
-      {(reembolsosPorSocio && Object.keys(reembolsosPorSocio).length > 0) && (
+      {tipo !== "personal" && (reembolsosPorSocio && Object.keys(reembolsosPorSocio).length > 0) && (
         <div className="mb-6">
           <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reembolsos personales pendientes</div>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
