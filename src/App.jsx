@@ -462,9 +462,26 @@ function FontImport() {
       .stamp{font-family:'Special Elite',monospace;letter-spacing:.08em}
       .recibo-linea{border-bottom:2px dashed #333;margin:20px 0}
       @media print {
+        @page { size: auto; margin: 0.3in; }
         body * { visibility: hidden; }
         #recibo-print, #recibo-print * { visibility: visible; }
-        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; }
+        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; font-size: 10.5px !important; line-height: 1.2 !important; padding: 6px !important; }
+        #recibo-print .mb-6 { margin-bottom: 6px !important; }
+        #recibo-print .mb-4 { margin-bottom: 5px !important; }
+        #recibo-print .mb-3 { margin-bottom: 4px !important; }
+        #recibo-print .mb-2 { margin-bottom: 3px !important; }
+        #recibo-print .p-3 { padding: 4px !important; }
+        #recibo-print .py-2\\.5 { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .py-2 { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .py-1\\.5 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print .py-1 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print td, #recibo-print th { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print .text-\\[16px\\] { font-size: 12px !important; }
+        #recibo-print .text-\\[14px\\], #recibo-print .text-\\[15px\\] { font-size: 11px !important; }
+        #recibo-print .text-\\[13px\\] { font-size: 10px !important; }
+        #recibo-print .text-sm { font-size: 9.5px !important; }
+        #recibo-print .text-\\[11px\\], #recibo-print .text-xs { font-size: 8.5px !important; }
+        #recibo-print .text-\\[10px\\] { font-size: 7.5px !important; }
         .no-print { display: none !important; }
       }
     `}</style>
@@ -5916,10 +5933,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
       // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
       // Se muestra como reposición de caja chica, en vez de desaparecer sin explicación.
       const keyCaja = cuentaPago.id;
-      if (!reposicionesTrabajo[keyCaja]) reposicionesTrabajo[keyCaja] = { nombre: cuentaPago.nombre, materiales: 0, nomina: 0, total: 0 };
+      if (!reposicionesTrabajo[keyCaja]) reposicionesTrabajo[keyCaja] = { nombre: cuentaPago.nombre, materiales: 0, nomina: 0, total: 0, items: [] };
       if (tipo === "Material") reposicionesTrabajo[keyCaja].materiales += monto;
       else reposicionesTrabajo[keyCaja].nomina += monto;
       reposicionesTrabajo[keyCaja].total += monto;
+      reposicionesTrabajo[keyCaja].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), monto });
       return;
     }
     const esEmpresa = p === "empresa";
@@ -5929,7 +5947,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
     if (tipo === "Material") reembolsosTrabajo[key].materiales += monto;
     else reembolsosTrabajo[key].nomina += monto;
     reembolsosTrabajo[key].total += monto;
-    reembolsosTrabajo[key].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto });
+    reembolsosTrabajo[key].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto, formaPago: item.formaPago || "efectivo" });
   };
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
@@ -6134,7 +6152,15 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               {listaReposiciones.map((r) => (
                 <tr key={r.nombre}>
                   <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
+                  <Td>
+                    {r.materiales > 0 && (r.nomina > 0 ? "Materiales + " : "Materiales")}
+                    {r.nomina > 0 && r.items.filter((it) => it.tipo === "Nómina").map((it, i, arr) => (
+                      <span key={i}>
+                        {`Nómina ${it.desc}`}
+                        {i < arr.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
+                  </Td>
                   <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
                 </tr>
               ))}
@@ -6160,7 +6186,15 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               {listaReembolsos.map((r) => (
                 <tr key={r.nombre}>
                   <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
+                  <Td>
+                    {r.materiales > 0 && (r.nomina > 0 ? "Materiales + " : "Materiales")}
+                    {r.nomina > 0 && r.items.filter((it) => it.tipo === "Nómina").map((it, i, arr) => (
+                      <span key={i}>
+                        {`Nómina ${it.desc}${it.formaPago === "efectivo" ? " pagada en efectivo" : ""}`}
+                        {i < arr.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
+                  </Td>
                   <Td right bold><span style={{ color: "#B26A00" }}>{money(r.total)}</span></Td>
                 </tr>
               ))}
