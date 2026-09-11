@@ -5214,20 +5214,35 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago.
   // Regla: se separa según la cuenta elegida al registrar el pago, PERO si se marcó "esGastoEmpresa"
   // (aunque salió de una cuenta personal), va directo al reporte de empresa sin importar la cuenta.
+  // En el reporte "personal" también se pueden agregar a mano otros gastos (marcados con
+  // incluidoEnPersonal), para que tú elijas cuáles quieres ver ahí, sin que salgan todos automático.
   const nominaT = data.nomina.filter((n) => {
     if (n.trabajoId !== trabajo.id) return false;
+    if (tipo === "personal" && n.incluidoEnPersonal) return true;
     if (n.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
+  // Los demás pagos de nómina de este trabajo que NO están en el reporte personal todavía,
+  // para que se puedan agregar a mano con un botón.
+  const nominaTDisponible =
+    tipo === "personal"
+      ? data.nomina.filter((n) => n.trabajoId === trabajo.id && !nominaT.some((x) => x.id === n.id))
+      : [];
 
   // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
     if (m.trabajoId !== trabajo.id) return false;
+    if (tipo === "personal" && m.incluidoEnPersonal) return true;
     if (m.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === m.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
+  // Los demás materiales de este trabajo que NO están en el reporte personal todavía.
+  const materialesTDisponible =
+    tipo === "personal"
+      ? data.materiales.filter((m) => m.trabajoId === trabajo.id && !materialesT.some((x) => x.id === m.id))
+      : [];
   const pagadoConTexto = (n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
     if (socio) return `dinero propio de ${socio.nombre}`;
@@ -5551,6 +5566,40 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {tipo === "personal" && (nominaTDisponible.length > 0 || materialesTDisponible.length > 0) && (
+        <div className="no-print mb-6 p-3" style={{ border: "1px dashed #B0A88E" }}>
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#7A7263" }}>
+            Otros gastos de este trabajo (pagados desde otra cuenta) — agrégalos aquí si quieres verlos en este reporte
+          </div>
+          <div className="space-y-1.5">
+            {nominaTDisponible.map((n) => (
+              <div key={n.id} className="flex justify-between items-center text-[12px]">
+                <span>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"} · {money(n.monto)}</span>
+                <button
+                  className="text-[11px] underline"
+                  style={{ color: "#2E7D32" }}
+                  onClick={() => update((d) => { const item = d.nomina.find((x) => x.id === n.id); if (item) item.incluidoEnPersonal = true; })}
+                >
+                  + Agregar
+                </button>
+              </div>
+            ))}
+            {materialesTDisponible.map((m) => (
+              <div key={m.id} className="flex justify-between items-center text-[12px]">
+                <span>{m.descripcion || "Material"} · {money(materialNeto(m))}</span>
+                <button
+                  className="text-[11px] underline"
+                  style={{ color: "#2E7D32" }}
+                  onClick={() => update((d) => { const item = d.materiales.find((x) => x.id === m.id); if (item) item.incluidoEnPersonal = true; })}
+                >
+                  + Agregar
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
