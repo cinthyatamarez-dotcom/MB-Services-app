@@ -5254,9 +5254,6 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
       if (!cuentaPago || cuentaPago.esPersonal) return; // solo interesa lo que salió de cuenta de empresa
       const esMaterial = item.descripcion !== undefined;
-      // Los materiales pagados desde la cuenta principal (Max One) ya se restan aparte
-      // como "materialesPagadosPorEmpresa" — no se vuelven a restar aquí para no duplicar.
-      if (esMaterial && cuentaPago.esCuentaAntesSociedad) return;
       const monto = esMaterial ? materialNeto(item) : Number(item.monto || 0);
       if (!devolverACuentaEmpresa[cuentaPago.id]) devolverACuentaEmpresa[cuentaPago.id] = { nombre: cuentaPago.nombre, monto: 0 };
       devolverACuentaEmpresa[cuentaPago.id].monto += monto;
@@ -5316,7 +5313,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   }).reduce((s, m) => s + Number(m.monto || 0), 0);
 
   const totalDevolverACuentaEmpresa = listaDevolverACuentaEmpresa.reduce((s, r) => s + r.monto, 0);
-  const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos - totalDevolverACuentaEmpresa;
+  // En el reporte personal, los materiales de cuenta de empresa ya van dentro de "devolverACuentaEmpresa",
+  // así que no se cuentan aparte aquí (para no restarlos dos veces).
+  const gananciaNeta = total - manoDeObraPendiente - (tipo === "personal" ? 0 : materialesPagadosPorEmpresa) - totalReembolsos - totalDevolverACuentaEmpresa;
   const cuotaBase = gananciaNeta / 2;
   const hayPendiente = totalPendienteCobro > 0;
 
@@ -5647,7 +5646,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
                 <td className="text-sm py-1.5 text-right">-{money(manoDeObraPendiente)}</td>
               </tr>
             )}
-            {materialesPagadosPorEmpresa > 0 && (
+            {tipo !== "personal" && materialesPagadosPorEmpresa > 0 && (
               <tr>
                 <td className="text-sm py-1.5 pl-2.5">(–) Materiales</td>
                 <td className="text-sm py-1.5 text-right">-{money(materialesPagadosPorEmpresa)}</td>
