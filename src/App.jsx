@@ -6152,15 +6152,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               {listaReposiciones.map((r) => (
                 <tr key={r.nombre}>
                   <Td>{r.nombre}</Td>
-                  <Td>
-                    {r.materiales > 0 && (r.nomina > 0 ? "Materiales + " : "Materiales")}
-                    {r.nomina > 0 && r.items.filter((it) => it.tipo === "Nómina").map((it, i, arr) => (
-                      <span key={i}>
-                        {`Nómina ${it.desc}`}
-                        {i < arr.length - 1 ? ", " : ""}
-                      </span>
-                    ))}
-                  </Td>
+                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
                   <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
                 </tr>
               ))}
@@ -6186,15 +6178,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               {listaReembolsos.map((r) => (
                 <tr key={r.nombre}>
                   <Td>{r.nombre}</Td>
-                  <Td>
-                    {r.materiales > 0 && (r.nomina > 0 ? "Materiales + " : "Materiales")}
-                    {r.nomina > 0 && r.items.filter((it) => it.tipo === "Nómina").map((it, i, arr) => (
-                      <span key={i}>
-                        {`Nómina ${it.desc}${it.formaPago === "efectivo" ? " pagada en efectivo" : ""}`}
-                        {i < arr.length - 1 ? ", " : ""}
-                      </span>
-                    ))}
-                  </Td>
+                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
                   <Td right bold><span style={{ color: "#B26A00" }}>{money(r.total)}</span></Td>
                 </tr>
               ))}
