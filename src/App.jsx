@@ -5203,11 +5203,6 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
-  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
-  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
-  const nominaMassielPagada = data.nomina
-    .filter((n) => n.trabajoId === trabajo.id && n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
-    .reduce((s, n) => s + Number(n.monto || 0), 0);
 
   // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
@@ -5588,9 +5583,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           <thead>
             <tr>
               <NavyTh>Entidad</NavyTh>
-              <NavyTh right>Reembolso</NavyTh>
               <NavyTh right>Ganancia</NavyTh>
-              {nominaMassielPagada > 0 && <NavyTh right>Nómina Massiel</NavyTh>}
+              <NavyTh right>Reembolso</NavyTh>
               <NavyTh right>Monto total a pagar</NavyTh>
               <NavyTh center>Estado</NavyTh>
             </tr>
@@ -5601,14 +5595,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               const pagado = !!estado?.pagado;
               const esMbServices = s.id === "entidad_mb_services";
               const reembolsoEntidad = esMbServices ? totalReembolsos : 0;
-              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
+              const montoEntidad = cuotaBase + reembolsoEntidad;
               return (
                 <tr key={s.id}>
                   <NavyTd>{s.nombre}</NavyTd>
-                  <NavyTd right>{money(reembolsoEntidad)}</NavyTd>
                   <NavyTd right>{money(cuotaBase)}</NavyTd>
-                  {nominaMassielPagada > 0 && <NavyTd right>{money(nominaMassielEntidad)}</NavyTd>}
+                  <NavyTd right>{money(reembolsoEntidad)}</NavyTd>
                   <NavyTd right bold>{money(montoEntidad)}</NavyTd>
                   <NavyTd center>
                     <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
@@ -5625,7 +5617,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos + nominaMassielPagada : 0);
+            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos : 0);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(montoEntidad)}:</span>
@@ -5906,11 +5898,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
-  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
-  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
-  const nominaMassielPagada = nominaT
-    .filter((n) => n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
-    .reduce((s, n) => s + Number(n.monto || 0), 0);
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
   // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
@@ -6195,9 +6182,8 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <thead>
             <tr>
               <Th>Entidad</Th>
-              <Th right>Reembolso</Th>
               <Th right>Ganancia</Th>
-              {nominaMassielPagada > 0 && <Th right>Nómina Massiel</Th>}
+              <Th right>Reembolso</Th>
               <Th right>Monto total a pagar</Th>
               <Th center>Estado</Th>
             </tr>
@@ -6208,14 +6194,12 @@ function ReciboModal({ trabajo, data, update, onClose }) {
               const pagado = !!estado?.pagado;
               const esMbServices = s.id === "entidad_mb_services";
               const reembolsoEntidad = esMbServices ? totalReembolsosTrabajo : 0;
-              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
+              const montoEntidad = cuotaBase + reembolsoEntidad;
               return (
                 <tr key={s.id}>
                   <Td>{s.nombre}</Td>
-                  <Td right>{money(reembolsoEntidad)}</Td>
                   <Td right>{money(cuotaBase)}</Td>
-                  {nominaMassielPagada > 0 && <Td right>{money(nominaMassielEntidad)}</Td>}
+                  <Td right>{money(reembolsoEntidad)}</Td>
                   <Td right bold>{money(montoEntidad)}</Td>
                   <Td center>
                     <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
@@ -6230,7 +6214,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
-            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo + nominaMassielPagada : 0);
+            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo : 0);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(totalConReembolso)}:</span>
