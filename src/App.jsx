@@ -5243,6 +5243,27 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     tipo === "personal"
       ? data.materiales.filter((m) => m.trabajoId === trabajo.id && !materialesT.some((x) => x.id === m.id))
       : [];
+
+  // En el reporte personal: si se agregó a mano un gasto que en realidad salió de una cuenta de la
+  // empresa (Max One/MB Services), esa plata hay que devolvérsela a esa cuenta — porque quien recibió
+  // el pago del cliente aquí fue una persona, no la empresa.
+  const devolverACuentaEmpresa = {};
+  if (tipo === "personal") {
+    [...nominaT, ...materialesT].forEach((item) => {
+      if (item.esGastoEmpresa) return; // esto ya se contabiliza en el reporte de empresa aparte
+      const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+      if (!cuentaPago || cuentaPago.esPersonal) return; // solo interesa lo que salió de cuenta de empresa
+      const esMaterial = item.descripcion !== undefined;
+      // Los materiales pagados desde la cuenta principal (Max One) ya se restan aparte
+      // como "materialesPagadosPorEmpresa" — no se vuelven a restar aquí para no duplicar.
+      if (esMaterial && cuentaPago.esCuentaAntesSociedad) return;
+      const monto = esMaterial ? materialNeto(item) : Number(item.monto || 0);
+      if (!devolverACuentaEmpresa[cuentaPago.id]) devolverACuentaEmpresa[cuentaPago.id] = { nombre: cuentaPago.nombre, monto: 0 };
+      devolverACuentaEmpresa[cuentaPago.id].monto += monto;
+    });
+  }
+  const listaDevolverACuentaEmpresa = Object.values(devolverACuentaEmpresa);
+
   const pagadoConTexto = (n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
     if (socio) return `dinero propio de ${socio.nombre}`;
@@ -5294,7 +5315,8 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     return !!cuentaPago?.esCuentaAntesSociedad;
   }).reduce((s, m) => s + Number(m.monto || 0), 0);
 
-  const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos;
+  const totalDevolverACuentaEmpresa = listaDevolverACuentaEmpresa.reduce((s, r) => s + r.monto, 0);
+  const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos - totalDevolverACuentaEmpresa;
   const cuotaBase = gananciaNeta / 2;
   const hayPendiente = totalPendienteCobro > 0;
 
@@ -5613,6 +5635,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               <td className="text-sm py-1.5 pl-2.5">{hayPendiente ? "Total recibido / a cobrar" : "Total recibido"}</td>
               <td className="text-sm py-1.5 text-right">{money(total)}</td>
             </tr>
+            {listaDevolverACuentaEmpresa.map((r) => (
+              <tr key={r.nombre}>
+                <td className="text-sm py-1.5 pl-2.5" style={{ color: "#B26A00" }}>(–) Se le debe devolver a {r.nombre}</td>
+                <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(r.monto)}</td>
+              </tr>
+            ))}
             {manoDeObraPendiente > 0 && (
               <tr>
                 <td className="text-sm py-1.5 pl-2.5">(–) Pago pendiente a trabajadores</td>
