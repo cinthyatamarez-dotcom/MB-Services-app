@@ -5410,10 +5410,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       {children}
     </td>
   );
-  const estadoGeneral = hayPendiente ? "pendiente" : "pagado";
+  const listaParaReparto = tipo === "personal" ? data.socios : ENTIDADES_REPARTO;
+  const todosRepartosPagados = listaParaReparto.every((s) => !!repartoPagado[s.id]?.pagado);
+  const estadoGeneral = todosRepartosPagados ? "pagado" : "pendiente";
+  const estadoGeneralTexto = todosRepartosPagados ? "CERRADO Y PAGADO EN SU TOTALIDAD" : "CERRADO";
   const colorPrimario = tipo === "personal" ? "#1F3864" : "#1B5E20";
   const colorClaro = tipo === "personal" ? "#DCE6F1" : "#E1F0E3";
-  const estadoGeneralTexto = hayPendiente ? "PENDIENTE — ESPERANDO COBRO DEL CLIENTE" : "PAGADO EN SU TOTALIDAD";
 
   return (
     <HojaImprimible
@@ -6350,10 +6352,12 @@ function ReciboModal({ trabajo, data, update, onClose }) {
 
       <div
         className="flex items-center gap-2.5 px-4 py-3 mb-6 text-sm"
-        style={{ background: "#E8F5E9", border: "1px solid #2E7D32", borderRadius: 4 }}
+        style={{ background: ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#E8F5E9" : "#FBEAEA", border: `1px solid ${ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#2E7D32" : "#C62828"}`, borderRadius: 4 }}
       >
         <span>ESTADO GENERAL DEL TRABAJO:</span>
-        <b style={{ color: "#2E7D32" }}>CERRADO</b>
+        <b style={{ color: ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#2E7D32" : "#C62828" }}>
+          {ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "CERRADO Y PAGADO EN SU TOTALIDAD" : "CERRADO"}
+        </b>
       </div>
 
       <div style={{ borderTop: "1px solid #D9D9D9", paddingTop: 10 }}>
