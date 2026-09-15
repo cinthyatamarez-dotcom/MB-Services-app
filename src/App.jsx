@@ -6218,38 +6218,83 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <thead>
             <tr>
               <Th>Descripción del rubro</Th>
-              <Th center>Pagado por</Th>
               <Th right>Monto</Th>
             </tr>
           </thead>
           <tbody>
-            {materialesT.map((m) => (
-              <tr key={m.id}>
-                <Td>
-                  <span className="pl-3" style={{ color: "#666" }}>{m.descripcion || "Material"}</span>
-                </Td>
-                <Td center>{pagadorNombre(data, m.pagadoPor, m.cuentaId)}</Td>
-                <Td right>{money(materialNeto(m))}</Td>
-              </tr>
-            ))}
-            {nominaT.filter((n) => n.estado !== "pendiente").map((n) => (
-              <tr key={n.id}>
-                <Td>
-                  <span className="pl-3" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span>
-                </Td>
-                <Td center>{pagadorNombre(data, n.pagadoPor, n.cuentaId)}</Td>
-                <Td right>{money(n.monto)}</Td>
-              </tr>
-            ))}
+            {(() => {
+              const agrupar = (items, esMaterial) => {
+                const grupos = {};
+                items.forEach((item) => {
+                  const nombre = pagadorNombre(data, item.pagadoPor, item.cuentaId);
+                  const cuentaPago = data.cuentas.find((c2) => c2.id === item.cuentaId);
+                  const esReposicion = !!cuentaPago?.esCuentaAntesSociedad;
+                  if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [] };
+                  grupos[nombre].items.push(item);
+                });
+                return Object.values(grupos).sort((a, b) => (b.esReposicion ? 1 : 0) - (a.esReposicion ? 1 : 0));
+              };
+              const gruposMateriales = agrupar(materialesT, true);
+              const gruposNomina = agrupar(nominaT.filter((n) => n.estado !== "pendiente"), false);
+              return (
+                <>
+                  {gruposMateriales.length > 0 && (
+                    <tr>
+                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={2} style={{ color: "#7A7263" }}>Materiales</td>
+                    </tr>
+                  )}
+                  {gruposMateriales.map((g) => (
+                    <React.Fragment key={"mat-" + g.nombre}>
+                      <tr>
+                        <td className="text-[11px] font-semibold py-1 pl-3" colSpan={2} style={{ color: g.esReposicion ? GREEN : "#B26A00" }}>
+                          {g.nombre}
+                          {g.esReposicion && (
+                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>↩ reposición</span>
+                          )}
+                        </td>
+                      </tr>
+                      {g.items.map((m) => (
+                        <tr key={m.id}>
+                          <Td><span className="pl-5" style={{ color: "#666" }}>{m.descripcion || "Material"}</span></Td>
+                          <Td right>{money(materialNeto(m))}</Td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                  {gruposNomina.length > 0 && (
+                    <tr>
+                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={2} style={{ color: "#7A7263", borderTop: gruposMateriales.length > 0 ? `1px dashed ${LINE}` : "none" }}>Mano de obra</td>
+                    </tr>
+                  )}
+                  {gruposNomina.map((g) => (
+                    <React.Fragment key={"nom-" + g.nombre}>
+                      <tr>
+                        <td className="text-[11px] font-semibold py-1 pl-3" colSpan={2} style={{ color: g.esReposicion ? GREEN : "#B26A00" }}>
+                          {g.nombre}
+                          {g.esReposicion && (
+                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>↩ reposición</span>
+                          )}
+                        </td>
+                      </tr>
+                      {g.items.map((n) => (
+                        <tr key={n.id}>
+                          <Td><span className="pl-5" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span></Td>
+                          <Td right>{money(n.monto)}</Td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </>
+              );
+            })()}
             {c.manoDeObraPendiente > 0 && (
               <tr>
                 <Td>Mano de obra pendiente de pagar</Td>
-                <Td center>Egreso acumulado</Td>
                 <Td right bold>{money(c.manoDeObraPendiente)}</Td>
               </tr>
             )}
             <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
-              <td className="text-sm font-bold py-2 px-2.5" colSpan={2} style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
+              <td className="text-sm font-bold py-2 px-2.5" style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
               <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(c.materiales + c.manoDeObra)}</td>
             </tr>
           </tbody>
