@@ -4409,7 +4409,6 @@ function Reportes({ data, update }) {
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
-    .filter((t) => !t.pagoPersonal) // los trabajos marcados como 100% pago personal solo salen en Cierre Personal
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
     .filter((t) => !filtroTrabajoReportes || t.id === filtroTrabajoReportes)
