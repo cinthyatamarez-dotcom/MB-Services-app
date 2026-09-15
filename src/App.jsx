@@ -5723,7 +5723,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
             {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? totalReembolsos : 0);
+              const davidId = data.socios.find((sx) => sx.nombre === "David")?.id;
+              const reembolsoDavid = davidId ? (reembolsosPorSocio[davidId]?.monto || 0) : 0;
+              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? (totalReembolsos - reembolsoDavid) : reembolsoDavid);
               const montoEntidad = cuotaBase + reembolsoEntidad;
               return (
                 <tr key={s.id}>
@@ -5746,7 +5748,9 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? totalReembolsos : 0);
+            const davidId = data.socios.find((sx) => sx.nombre === "David")?.id;
+              const reembolsoDavid = davidId ? (reembolsosPorSocio[davidId]?.monto || 0) : 0;
+              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? (totalReembolsos - reembolsoDavid) : reembolsoDavid);
             const montoEntidad = cuotaBase + reembolsoEntidad;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
@@ -6321,32 +6325,37 @@ function ReciboModal({ trabajo, data, update, onClose }) {
             </tr>
           </thead>
           <tbody>
-            {ENTIDADES_REPARTO.map((s) => {
-              const estado = repartoCierre[s.id];
-              const pagado = !!estado?.pagado;
-              const esMbServices = s.id === "entidad_mb_services";
-              const reembolsoEntidad = esMbServices ? totalReembolsosTrabajo : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad;
-              return (
-                <tr key={s.id}>
-                  <Td>{s.nombre}</Td>
-                  <Td right>{money(cuotaBase)}</Td>
-                  <Td right>{money(reembolsoEntidad)}</Td>
-                  <Td right bold>{money(montoEntidad)}</Td>
-                  <Td center>
-                    <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
-                    {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
-                  </Td>
-                </tr>
-              );
-            })}
+            {(() => {
+              const reembolsoParaMaxOne = listaReembolsos.filter((r) => r.nombre === "David").reduce((s, r) => s + r.total, 0);
+              const reembolsoParaMBServices = totalReembolsosTrabajo - reembolsoParaMaxOne;
+              return ENTIDADES_REPARTO.map((s) => {
+                const estado = repartoCierre[s.id];
+                const pagado = !!estado?.pagado;
+                const esMbServices = s.id === "entidad_mb_services";
+                const reembolsoEntidad = esMbServices ? reembolsoParaMBServices : reembolsoParaMaxOne;
+                const montoEntidad = cuotaBase + reembolsoEntidad;
+                return (
+                  <tr key={s.id}>
+                    <Td>{s.nombre}</Td>
+                    <Td right>{money(cuotaBase)}</Td>
+                    <Td right>{money(reembolsoEntidad)}</Td>
+                    <Td right bold>{money(montoEntidad)}</Td>
+                    <Td center>
+                      <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
+                      {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
+                    </Td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
-            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo : 0);
+            const reembolsoParaMaxOne = listaReembolsos.filter((r) => r.nombre === "David").reduce((s, r) => s + r.total, 0);
+            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? (totalReembolsosTrabajo - reembolsoParaMaxOne) : reembolsoParaMaxOne);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(totalConReembolso)}:</span>
