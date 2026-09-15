@@ -6256,30 +6256,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
         </table>
       </div>
 
-      {listaReposiciones.length > 0 && (
-        <div className="mb-6">
-          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: GREEN }}>Reposición de caja chica (ya cubierto con el pago del cliente)</div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Cuenta</Th>
-                <Th>Concepto</Th>
-                <Th right>Monto</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaReposiciones.map((r) => (
-                <tr key={r.nombre}>
-                  <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
-                  <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       <div className="mb-6">
         <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
           <span className="text-[13px] font-bold uppercase" style={{ color: colorPrimario }}>Balance: Ganancia neta</span>
