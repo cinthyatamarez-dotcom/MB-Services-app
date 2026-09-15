@@ -1812,7 +1812,7 @@ function Bitacora({ data, update }) {
           <div className="flex items-center gap-2 mb-2">
             <select className="ledger-input flex-1" value={filtroTrabajo} onChange={(e) => setFiltroTrabajo(e.target.value)}>
               <option value="">Todos los trabajos</option>
-              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</option>)}
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
             </select>
             {filtroTrabajo && (
               <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajo("")}>
@@ -1851,7 +1851,7 @@ function Bitacora({ data, update }) {
         <div className="card p-4 mb-4 space-y-2">
           <select className="ledger-input" value={form.trabajoId || ""} onChange={(e) => setForm({ ...form, trabajoId: e.target.value })}>
             <option value="">Trabajo…</option>
-            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
           </select>
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           <textarea
@@ -2291,6 +2291,7 @@ function Nomina({ data, update }) {
   const [payForm, setPayForm] = useState(null);
   const [editandoPagoId, setEditandoPagoId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [filtroTrabajoNomina, setFiltroTrabajoNomina] = useState("");
   const turnoHoy = socioEnTurno(data, todayISO());
 
   const addEmpleado = () => {
@@ -2434,7 +2435,7 @@ function Nomina({ data, update }) {
                 }}
               >
                 <option value="">Trabajo (opcional)…</option>
-                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
               </select>
               {payForm.trabajoId && socioTurnoNominaTrabajo(data, payForm.trabajoId) && (
                 <p className="text-[11px] text-[#7A7263]">
@@ -2515,8 +2516,23 @@ function Nomina({ data, update }) {
 
       <div className="card p-4 mt-4">
         <div className="stamp text-[13px] text-[#7A7263] mb-3">HISTORIAL DE PAGOS</div>
+        {data.trabajos.length > 0 && (
+          <div className="flex items-center gap-2 mb-3">
+            <select className="ledger-input flex-1" value={filtroTrabajoNomina} onChange={(e) => setFiltroTrabajoNomina(e.target.value)}>
+              <option value="">Filtrar por trabajo — todos</option>
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
+            </select>
+            {filtroTrabajoNomina && (
+              <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajoNomina("")}>
+                Quitar filtro
+              </button>
+            )}
+          </div>
+        )}
         {data.nomina.length === 0 && <Empty text="Sin pagos registrados." />}
-        {[...data.nomina].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((n) => {
+        {[...data.nomina]
+          .filter((n) => !filtroTrabajoNomina || n.trabajoId === filtroTrabajoNomina)
+          .sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((n) => {
           const emp = data.empleados.find((e) => e.id === n.empleadoId);
           const trab = data.trabajos.find((t) => t.id === n.trabajoId);
           const editando = editandoPagoId === n.id;
@@ -2530,7 +2546,7 @@ function Nomina({ data, update }) {
                   </select>
                   <select className="ledger-input text-xs" value={editForm.trabajoId || ""} onChange={(e) => setEditForm({ ...editForm, trabajoId: e.target.value })}>
                     <option value="">Trabajo (opcional)…</option>
-                    {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                    {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                   </select>
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={editForm.monto || ""} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
                   <input className="ledger-input text-xs" type="date" value={editForm.fecha || ""} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
@@ -3057,7 +3073,7 @@ function Materiales({ data, update, onViewPhoto }) {
               }}
             >
               <option value="">Trabajo…</option>
-              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
             </select>
             {scan.trabajoId && socioTurnoMaterial(data, scan.trabajoId) && (
               <p className="text-[11px] text-[#7A7263]">
@@ -3124,7 +3140,7 @@ function Materiales({ data, update, onViewPhoto }) {
             }}
           >
             <option value="">Trabajo…</option>
-            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
           </select>
           {form.trabajoId && socioTurnoMaterial(data, form.trabajoId) && (
             <p className="text-[11px] text-[#7A7263]">
@@ -3320,7 +3336,7 @@ function Materiales({ data, update, onViewPhoto }) {
                       <div className="border p-2 mt-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
                         <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
                           <option value="">Trabajo…</option>
-                          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                         </select>
                         <select
                           className="ledger-input text-xs"
@@ -3476,7 +3492,7 @@ function Materiales({ data, update, onViewPhoto }) {
                         <div className="border p-2 mt-1 mb-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
                           <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
                             <option value="">Trabajo…</option>
-                            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                           </select>
                           <select
                             className="ledger-input text-xs"
@@ -4023,7 +4039,7 @@ function Cuentas({ data, update, onViewPhoto }) {
               </select>
               <select className="ledger-input" value={incomeForm.trabajoId || ""} onChange={(e) => setIncomeForm({ ...incomeForm, trabajoId: e.target.value })}>
                 <option value="">Trabajo relacionado (opcional)…</option>
-                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
               </select>
               <input className="ledger-input" type="number" placeholder="Monto" value={incomeForm.monto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, monto: e.target.value })} />
               <label className="text-[11px] text-[#7A7263] block mb-0.5">{incomeForm.estado === "pendiente" ? "Fecha en que se registró" : "Fecha en que se recibió"}</label>
@@ -4389,11 +4405,14 @@ function Reportes({ data, update }) {
   const [pagosPersonalTrabajo, setPagosPersonalTrabajo] = useState(null);
   const [mostrarCarpeta, setMostrarCarpeta] = useState(false);
   const [mostrarCarpetaPersonal, setMostrarCarpetaPersonal] = useState(false);
+  const [filtroTrabajoReportes, setFiltroTrabajoReportes] = useState("");
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
+    .filter((t) => !t.pagoPersonal) // los trabajos marcados como 100% pago personal solo salen en Cierre Personal
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
+    .filter((t) => !filtroTrabajoReportes || t.id === filtroTrabajoReportes)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4474,6 +4493,21 @@ function Reportes({ data, update }) {
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <div className="stamp text-[13px] text-[#7A7263] mb-3">CIERRE EMPRESA</div>
+          {data.trabajos.filter((t) => t.estado === "cerrado").length > 0 && (
+            <div className="flex items-center gap-2 mb-3">
+              <select className="ledger-input flex-1 text-xs" value={filtroTrabajoReportes} onChange={(e) => setFiltroTrabajoReportes(e.target.value)}>
+                <option value="">Buscar un trabajo — todos</option>
+                {data.trabajos.filter((t) => t.estado === "cerrado").map((t) => (
+                  <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>
+                ))}
+              </select>
+              {filtroTrabajoReportes && (
+                <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajoReportes("")}>
+                  Quitar
+                </button>
+              )}
+            </div>
+          )}
       {trabajosCerrados.length === 0 && (
         <Empty text="Aún no hay trabajos cerrados. Marca un trabajo como 'Cerrado' en la pestaña Trabajos para generar su reporte." />
       )}
