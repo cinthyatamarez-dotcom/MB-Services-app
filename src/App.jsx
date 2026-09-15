@@ -6223,17 +6223,48 @@ function ReciboModal({ trabajo, data, update, onClose }) {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <Td>Materiales de la obra (subtotal)</Td>
-              <Td center>Egreso directo</Td>
-              <Td right bold>{money(c.materiales)}</Td>
-            </tr>
-            {c.manoDeObraPagada > 0 && (
+            {materialesT.length > 0 && (
+              <>
+                {materialesT.map((m) => (
+                  <tr key={m.id}>
+                    <Td>
+                      <span className="pl-3" style={{ color: "#666" }}>{m.descripcion || "Material"}</span>
+                    </Td>
+                    <Td center>Egreso directo</Td>
+                    <Td right>{money(materialNeto(m))}</Td>
+                  </tr>
+                ))}
+                <tr>
+                  <Td><span style={{ fontStyle: "italic" }}>Subtotal materiales</span></Td>
+                  <Td center></Td>
+                  <Td right bold>{money(c.materiales)}</Td>
+                </tr>
+              </>
+            )}
+            {materialesT.length === 0 && (
               <tr>
-                <Td>Mano de obra ya pagada</Td>
+                <Td>Materiales de la obra (subtotal)</Td>
                 <Td center>Egreso directo</Td>
-                <Td right bold>{money(c.manoDeObraPagada)}</Td>
+                <Td right bold>{money(c.materiales)}</Td>
               </tr>
+            )}
+            {nominaT.filter((n) => n.estado !== "pendiente").length > 0 && (
+              <>
+                {nominaT.filter((n) => n.estado !== "pendiente").map((n) => (
+                  <tr key={n.id}>
+                    <Td>
+                      <span className="pl-3" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span>
+                    </Td>
+                    <Td center>Egreso directo</Td>
+                    <Td right>{money(n.monto)}</Td>
+                  </tr>
+                ))}
+                <tr>
+                  <Td><span style={{ fontStyle: "italic" }}>Subtotal mano de obra</span></Td>
+                  <Td center></Td>
+                  <Td right bold>{money(c.manoDeObraPagada)}</Td>
+                </tr>
+              </>
             )}
             {c.manoDeObraPendiente > 0 && (
               <tr>
