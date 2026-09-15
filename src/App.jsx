@@ -6218,54 +6218,29 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <thead>
             <tr>
               <Th>Descripción del rubro</Th>
-              <Th center>Tipo de gasto</Th>
+              <Th center>Pagado por</Th>
               <Th right>Monto</Th>
             </tr>
           </thead>
           <tbody>
-            {materialesT.length > 0 && (
-              <>
-                {materialesT.map((m) => (
-                  <tr key={m.id}>
-                    <Td>
-                      <span className="pl-3" style={{ color: "#666" }}>{m.descripcion || "Material"}</span>
-                    </Td>
-                    <Td center>Egreso directo</Td>
-                    <Td right>{money(materialNeto(m))}</Td>
-                  </tr>
-                ))}
-                <tr>
-                  <Td><span style={{ fontStyle: "italic" }}>Subtotal materiales</span></Td>
-                  <Td center></Td>
-                  <Td right bold>{money(c.materiales)}</Td>
-                </tr>
-              </>
-            )}
-            {materialesT.length === 0 && (
-              <tr>
-                <Td>Materiales de la obra (subtotal)</Td>
-                <Td center>Egreso directo</Td>
-                <Td right bold>{money(c.materiales)}</Td>
+            {materialesT.map((m) => (
+              <tr key={m.id}>
+                <Td>
+                  <span className="pl-3" style={{ color: "#666" }}>{m.descripcion || "Material"}</span>
+                </Td>
+                <Td center>{pagadorNombre(data, m.pagadoPor, m.cuentaId)}</Td>
+                <Td right>{money(materialNeto(m))}</Td>
               </tr>
-            )}
-            {nominaT.filter((n) => n.estado !== "pendiente").length > 0 && (
-              <>
-                {nominaT.filter((n) => n.estado !== "pendiente").map((n) => (
-                  <tr key={n.id}>
-                    <Td>
-                      <span className="pl-3" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span>
-                    </Td>
-                    <Td center>Egreso directo</Td>
-                    <Td right>{money(n.monto)}</Td>
-                  </tr>
-                ))}
-                <tr>
-                  <Td><span style={{ fontStyle: "italic" }}>Subtotal mano de obra</span></Td>
-                  <Td center></Td>
-                  <Td right bold>{money(c.manoDeObraPagada)}</Td>
-                </tr>
-              </>
-            )}
+            ))}
+            {nominaT.filter((n) => n.estado !== "pendiente").map((n) => (
+              <tr key={n.id}>
+                <Td>
+                  <span className="pl-3" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span>
+                </Td>
+                <Td center>{pagadorNombre(data, n.pagadoPor, n.cuentaId)}</Td>
+                <Td right>{money(n.monto)}</Td>
+              </tr>
+            ))}
             {c.manoDeObraPendiente > 0 && (
               <tr>
                 <Td>Mano de obra pendiente de pagar</Td>
@@ -6304,32 +6279,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           </table>
         </div>
       )}
-
-      <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#B26A00" }}>Reembolso (compró material o pagó nómina de su cuenta personal)</div>
-        {listaReembolsos.length === 0 ? (
-          <div className="text-sm" style={{ color: "#888" }}>— nadie pagó de su cuenta personal en este trabajo —</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Persona / cuenta</Th>
-                <Th>Concepto</Th>
-                <Th right>Monto</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaReembolsos.map((r) => (
-                <tr key={r.nombre}>
-                  <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
-                  <Td right bold><span style={{ color: "#B26A00" }}>{money(r.total)}</span></Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
 
       <div className="mb-6">
         <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
