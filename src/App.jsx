@@ -6221,84 +6221,108 @@ function ReciboModal({ trabajo, data, update, onClose }) {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <Th>Descripción del rubro</Th>
+              <Th>Descripción</Th>
+              <Th>Pagado por</Th>
+              <Th>Fecha</Th>
               <Th right>Monto</Th>
             </tr>
           </thead>
           <tbody>
             {(() => {
-              const agrupar = (items, esMaterial) => {
+              const agrupar = (items) => {
                 const grupos = {};
                 items.forEach((item) => {
                   const nombre = pagadorNombre(data, item.pagadoPor, item.cuentaId);
                   const cuentaPago = data.cuentas.find((c2) => c2.id === item.cuentaId);
                   const esReposicion = !!cuentaPago?.esCuentaAntesSociedad;
-                  if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [] };
+                  if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [], total: 0 };
                   grupos[nombre].items.push(item);
                 });
                 return Object.values(grupos).sort((a, b) => (b.esReposicion ? 1 : 0) - (a.esReposicion ? 1 : 0));
               };
-              const gruposMateriales = agrupar(materialesT, true);
-              const gruposNomina = agrupar(nominaT.filter((n) => n.estado !== "pendiente"), false);
+              const gruposMateriales = agrupar(materialesT);
+              gruposMateriales.forEach((g) => { g.total = g.items.reduce((s, m) => s + materialNeto(m), 0); });
+              const nominaPagada = nominaT.filter((n) => n.estado !== "pendiente");
+              const gruposNomina = agrupar(nominaPagada);
+              gruposNomina.forEach((g) => { g.total = g.items.reduce((s, n) => s + Number(n.monto || 0), 0); });
+              const totalMateriales = gruposMateriales.reduce((s, g) => s + g.total, 0);
+              const totalManoDeObraPagada = gruposNomina.reduce((s, g) => s + g.total, 0);
+
+              const filaPagador = (g, colorTexto) => (
+                <tr key={g.nombre}>
+                  <td className="text-[11px] font-semibold py-1" colSpan={4} style={{ color: colorTexto }}>
+                    {g.nombre}
+                    {g.esReposicion && (
+                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>reposición</span>
+                    )}
+                  </td>
+                </tr>
+              );
+              const filaItem = (item, esMaterial) => (
+                <tr key={item.id}>
+                  <Td>{esMaterial ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra")}</Td>
+                  <Td></Td>
+                  <Td>{fmtDate(item.fecha)}</Td>
+                  <Td right>{money(esMaterial ? materialNeto(item) : Number(item.monto || 0))}</Td>
+                </tr>
+              );
+              const filaSubtotal = (g, colorTexto) => (
+                <tr key={g.nombre + "-sub"} style={{ borderBottom: `1px solid ${LINE}` }}>
+                  <td colSpan={3} className="text-[11px] py-1 text-right" style={{ fontStyle: "italic", color: colorTexto }}>Total pagado por {g.nombre}</td>
+                  <td className="text-[11px] font-bold py-1 text-right" style={{ color: colorTexto }}>{money(g.total)}</td>
+                </tr>
+              );
+
               return (
                 <>
                   {gruposMateriales.length > 0 && (
                     <tr>
-                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={2} style={{ color: "#7A7263" }}>Materiales</td>
+                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={4} style={{ color: "#7A7263" }}>Materiales</td>
                     </tr>
                   )}
                   {gruposMateriales.map((g) => (
                     <React.Fragment key={"mat-" + g.nombre}>
-                      <tr>
-                        <td className="text-[11px] font-semibold py-1 pl-3" colSpan={2} style={{ color: g.esReposicion ? GREEN : "#B26A00" }}>
-                          {g.nombre}
-                          {g.esReposicion && (
-                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>↩ reposición</span>
-                          )}
-                        </td>
-                      </tr>
-                      {g.items.map((m) => (
-                        <tr key={m.id}>
-                          <Td><span className="pl-5" style={{ color: "#666" }}>{m.descripcion || "Material"}</span></Td>
-                          <Td right>{money(materialNeto(m))}</Td>
-                        </tr>
-                      ))}
+                      {filaPagador(g, g.esReposicion ? GREEN : "#B26A00")}
+                      {g.items.map((m) => filaItem(m, true))}
+                      {filaSubtotal(g, g.esReposicion ? GREEN : "#B26A00")}
                     </React.Fragment>
                   ))}
+                  {gruposMateriales.length > 0 && (
+                    <tr>
+                      <td colSpan={3} className="text-sm font-bold py-1.5 text-right">Total materiales</td>
+                      <td className="text-sm font-bold py-1.5 text-right">{money(totalMateriales)}</td>
+                    </tr>
+                  )}
+
                   {gruposNomina.length > 0 && (
                     <tr>
-                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={2} style={{ color: "#7A7263", borderTop: gruposMateriales.length > 0 ? `1px dashed ${LINE}` : "none" }}>Mano de obra</td>
+                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={4} style={{ color: "#7A7263", borderTop: gruposMateriales.length > 0 ? `1px dashed ${LINE}` : "none" }}>Mano de obra</td>
                     </tr>
                   )}
                   {gruposNomina.map((g) => (
                     <React.Fragment key={"nom-" + g.nombre}>
-                      <tr>
-                        <td className="text-[11px] font-semibold py-1 pl-3" colSpan={2} style={{ color: g.esReposicion ? GREEN : "#B26A00" }}>
-                          {g.nombre}
-                          {g.esReposicion && (
-                            <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>↩ reposición</span>
-                          )}
-                        </td>
-                      </tr>
-                      {g.items.map((n) => (
-                        <tr key={n.id}>
-                          <Td><span className="pl-5" style={{ color: "#666" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"}</span></Td>
-                          <Td right>{money(n.monto)}</Td>
-                        </tr>
-                      ))}
+                      {filaPagador(g, g.esReposicion ? GREEN : "#B26A00")}
+                      {g.items.map((n) => filaItem(n, false))}
+                      {filaSubtotal(g, g.esReposicion ? GREEN : "#B26A00")}
                     </React.Fragment>
                   ))}
+                  {gruposNomina.length > 0 && (
+                    <tr>
+                      <td colSpan={3} className="text-sm font-bold py-1.5 text-right">Total mano de obra</td>
+                      <td className="text-sm font-bold py-1.5 text-right">{money(totalManoDeObraPagada)}</td>
+                    </tr>
+                  )}
                 </>
               );
             })()}
             {c.manoDeObraPendiente > 0 && (
               <tr>
-                <Td>Mano de obra pendiente de pagar</Td>
+                <td className="text-sm py-2 px-2.5" colSpan={3}>Mano de obra pendiente de pagar</td>
                 <Td right bold>{money(c.manoDeObraPendiente)}</Td>
               </tr>
             )}
             <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
-              <td className="text-sm font-bold py-2 px-2.5" style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
+              <td className="text-sm font-bold py-2 px-2.5" colSpan={3} style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
               <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(c.materiales + c.manoDeObra)}</td>
             </tr>
           </tbody>
