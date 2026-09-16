@@ -465,7 +465,8 @@ function FontImport() {
         @page { size: auto; margin: 0.3in; }
         body * { visibility: hidden; }
         #recibo-print, #recibo-print * { visibility: visible; }
-        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; font-size: 10.5px !important; line-height: 1.2 !important; padding: 6px !important; }
+        .fixed { position: static !important; overflow: visible !important; height: auto !important; max-height: none !important; }
+        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; overflow: visible !important; height: auto !important; max-height: none !important; font-size: 10.5px !important; line-height: 1.2 !important; padding: 6px !important; }
         #recibo-print .mb-6 { margin-bottom: 6px !important; }
         #recibo-print .mb-4 { margin-bottom: 5px !important; }
         #recibo-print .mb-3 { margin-bottom: 4px !important; }
@@ -6218,115 +6219,104 @@ function ReciboModal({ trabajo, data, update, onClose }) {
 
       <div className="mb-6">
         <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>II. Gastos y costos generales de la obra</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <Th>Descripción</Th>
-              <Th>Pagado por</Th>
-              <Th>Fecha</Th>
-              <Th right>Monto</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {(() => {
-              const agrupar = (items) => {
-                const grupos = {};
-                items.forEach((item) => {
-                  const nombre = pagadorNombre(data, item.pagadoPor, item.cuentaId);
-                  const cuentaPago = data.cuentas.find((c2) => c2.id === item.cuentaId);
-                  const esReposicion = !!cuentaPago?.esCuentaAntesSociedad;
-                  if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [], total: 0 };
-                  grupos[nombre].items.push(item);
-                });
-                return Object.values(grupos).sort((a, b) => (b.esReposicion ? 1 : 0) - (a.esReposicion ? 1 : 0));
-              };
-              const gruposMateriales = agrupar(materialesT);
-              gruposMateriales.forEach((g) => { g.total = g.items.reduce((s, m) => s + materialNeto(m), 0); });
-              const nominaPagada = nominaT.filter((n) => n.estado !== "pendiente");
-              const gruposNomina = agrupar(nominaPagada);
-              gruposNomina.forEach((g) => { g.total = g.items.reduce((s, n) => s + Number(n.monto || 0), 0); });
-              const totalMateriales = gruposMateriales.reduce((s, g) => s + g.total, 0);
-              const totalManoDeObraPagada = gruposNomina.reduce((s, g) => s + g.total, 0);
+        {(() => {
+          const agrupar = (items) => {
+            const grupos = {};
+            items.forEach((item) => {
+              const nombre = pagadorNombre(data, item.pagadoPor, item.cuentaId);
+              const cuentaPago = data.cuentas.find((c2) => c2.id === item.cuentaId);
+              const esReposicion = !!cuentaPago?.esCuentaAntesSociedad;
+              if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [], total: 0 };
+              grupos[nombre].items.push(item);
+            });
+            return Object.values(grupos).sort((a, b) => (b.esReposicion ? 1 : 0) - (a.esReposicion ? 1 : 0));
+          };
+          const colorPagador = (g) => {
+            if (g.esReposicion) return { texto: GREEN, borde: "#cfe0d6" };
+            if (g.nombre === "David") return { texto: "#7B3F9E", borde: "#DCC8E8" };
+            return { texto: "#B26A00", borde: "#F0D6B0" };
+          };
+          const gruposMateriales = agrupar(materialesT);
+          gruposMateriales.forEach((g) => { g.total = g.items.reduce((s, m) => s + materialNeto(m), 0); });
+          const nominaPagada = nominaT.filter((n) => n.estado !== "pendiente");
+          const gruposNomina = agrupar(nominaPagada);
+          gruposNomina.forEach((g) => { g.total = g.items.reduce((s, n) => s + Number(n.monto || 0), 0); });
+          const totalMateriales = gruposMateriales.reduce((s, g) => s + g.total, 0);
+          const totalManoDeObraPagada = gruposNomina.reduce((s, g) => s + g.total, 0);
 
-              const filaPagador = (g, colorTexto) => (
-                <tr key={g.nombre}>
-                  <td className="text-[11px] font-semibold py-1" colSpan={4} style={{ color: colorTexto }}>
-                    {g.nombre}
-                    {g.esReposicion && (
-                      <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5" style={{ background: "#E1F0E3", color: GREEN }}>reposición</span>
-                    )}
-                  </td>
-                </tr>
-              );
-              const filaItem = (item, esMaterial) => (
-                <tr key={item.id}>
-                  <Td>{esMaterial ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra")}</Td>
-                  <Td></Td>
-                  <Td>{fmtDate(item.fecha)}</Td>
-                  <Td right>{money(esMaterial ? materialNeto(item) : Number(item.monto || 0))}</Td>
-                </tr>
-              );
-              const filaSubtotal = (g, colorTexto) => (
-                <tr key={g.nombre + "-sub"} style={{ borderBottom: `1px solid ${LINE}` }}>
-                  <td colSpan={3} className="text-[11px] py-1 text-right" style={{ fontStyle: "italic", color: colorTexto }}>Total pagado por {g.nombre}</td>
-                  <td className="text-[11px] font-bold py-1 text-right" style={{ color: colorTexto }}>{money(g.total)}</td>
-                </tr>
-              );
+          const tarjetaPagador = (g, esMaterialGrupo) => {
+            const col = colorPagador(g);
+            return (
+              <div key={g.nombre} className="mb-2 p-2.5" style={{ background: "#fff", border: `1px solid ${col.borde}`, borderRadius: 5 }}>
+                <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: col.texto }}>
+                  {g.nombre}
+                  {g.esReposicion && (
+                    <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5 normal-case" style={{ background: "#E1F0E3", color: GREEN }}>reposición</span>
+                  )}
+                </p>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ddd" }}>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>{esMaterialGrupo ? "Material" : "Empleado"}</td>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Fecha de pago</td>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Método de pago</td>
+                      <td className="text-[9px] py-1 text-right" style={{ color: "#888" }}>Monto</td>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.items.map((item) => (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
+                        <td className="text-[10.5px] py-1">{esMaterialGrupo ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra")}</td>
+                        <td className="text-[10.5px] py-1">{fmtDate(item.fecha)}</td>
+                        <td className="text-[10.5px] py-1">{formaPagoTextoStandalone(item.formaPago, item.numeroCheque) || "—"}</td>
+                        <td className="text-[10.5px] py-1 text-right">{money(esMaterialGrupo ? materialNeto(item) : Number(item.monto || 0))}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td colSpan={3} className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>Total {g.nombre}</td>
+                      <td className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>{money(g.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          };
 
-              return (
-                <>
-                  {gruposMateriales.length > 0 && (
-                    <tr>
-                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={4} style={{ color: "#7A7263" }}>Materiales</td>
-                    </tr>
-                  )}
-                  {gruposMateriales.map((g) => (
-                    <React.Fragment key={"mat-" + g.nombre}>
-                      {filaPagador(g, g.esReposicion ? GREEN : "#B26A00")}
-                      {g.items.map((m) => filaItem(m, true))}
-                      {filaSubtotal(g, g.esReposicion ? GREEN : "#B26A00")}
-                    </React.Fragment>
-                  ))}
-                  {gruposMateriales.length > 0 && (
-                    <tr>
-                      <td colSpan={3} className="text-sm font-bold py-1.5 text-right">Total materiales</td>
-                      <td className="text-sm font-bold py-1.5 text-right">{money(totalMateriales)}</td>
-                    </tr>
-                  )}
-
-                  {gruposNomina.length > 0 && (
-                    <tr>
-                      <td className="text-[11px] font-bold uppercase py-1.5" colSpan={4} style={{ color: "#7A7263", borderTop: gruposMateriales.length > 0 ? `1px dashed ${LINE}` : "none" }}>Mano de obra</td>
-                    </tr>
-                  )}
-                  {gruposNomina.map((g) => (
-                    <React.Fragment key={"nom-" + g.nombre}>
-                      {filaPagador(g, g.esReposicion ? GREEN : "#B26A00")}
-                      {g.items.map((n) => filaItem(n, false))}
-                      {filaSubtotal(g, g.esReposicion ? GREEN : "#B26A00")}
-                    </React.Fragment>
-                  ))}
-                  {gruposNomina.length > 0 && (
-                    <tr>
-                      <td colSpan={3} className="text-sm font-bold py-1.5 text-right">Total mano de obra</td>
-                      <td className="text-sm font-bold py-1.5 text-right">{money(totalManoDeObraPagada)}</td>
-                    </tr>
-                  )}
-                </>
-              );
-            })()}
-            {c.manoDeObraPendiente > 0 && (
-              <tr>
-                <td className="text-sm py-2 px-2.5" colSpan={3}>Mano de obra pendiente de pagar</td>
-                <Td right bold>{money(c.manoDeObraPendiente)}</Td>
-              </tr>
-            )}
-            <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
-              <td className="text-sm font-bold py-2 px-2.5" colSpan={3} style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
-              <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(c.materiales + c.manoDeObra)}</td>
-            </tr>
-          </tbody>
-        </table>
+          return (
+            <>
+              {gruposMateriales.length > 0 && (
+                <div className="mb-3 p-3" style={{ background: "#EDF3FA", border: "1px solid #B7CDE8", borderRadius: 6 }}>
+                  <p className="text-[10px] font-bold uppercase mb-2" style={{ color: "#2C5A8A" }}>Materiales</p>
+                  {gruposMateriales.map((g) => tarjetaPagador(g, true))}
+                  <div className="flex justify-between text-[12px] font-bold pt-1.5 mt-1" style={{ color: "#2C5A8A", borderTop: "1px solid #B7CDE8" }}>
+                    <span>Total materiales</span>
+                    <span>{money(totalMateriales)}</span>
+                  </div>
+                </div>
+              )}
+              {gruposNomina.length > 0 && (
+                <div className="mb-3 p-3" style={{ background: "#FBF0E4", border: "1px solid #EAC896", borderRadius: 6 }}>
+                  <p className="text-[10px] font-bold uppercase mb-2" style={{ color: "#A15C00" }}>Mano de obra</p>
+                  {gruposNomina.map((g) => tarjetaPagador(g, false))}
+                  <div className="flex justify-between text-[12px] font-bold pt-1.5 mt-1" style={{ color: "#A15C00", borderTop: "1px solid #EAC896" }}>
+                    <span>Total mano de obra</span>
+                    <span>{money(totalManoDeObraPagada)}</span>
+                  </div>
+                </div>
+              )}
+              {c.manoDeObraPendiente > 0 && (
+                <div className="flex justify-between text-sm py-1.5 px-1">
+                  <span>Mano de obra pendiente de pagar</span>
+                  <span className="font-bold">{money(c.manoDeObraPendiente)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold py-2 px-2.5" style={{ background: colorClaro, color: colorPrimario, borderTop: `1px solid ${colorPrimario}` }}>
+                <span>Total de gastos y costos generales</span>
+                <span>{money(c.materiales + c.manoDeObra)}</span>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       <div className="mb-6">
