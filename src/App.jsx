@@ -228,6 +228,7 @@ const TABS = [
   { id: "materiales", label: "Materiales", icon: Package },
   { id: "cuentas", label: "Cuentas", icon: Landmark },
   { id: "reembolsos", label: "Reembolsos", icon: ArrowLeftRight },
+  { id: "reportesimple", label: "Reporte Simple", icon: ClipboardList },
   { id: "reportes", label: "Reportes de cierre", icon: ClipboardList },
 ];
 
@@ -418,6 +419,7 @@ export default function App() {
         {tab === "materiales" && <Materiales data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "cuentas" && <Cuentas data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "reembolsos" && <Reembolsos data={data} update={update} />}
+        {tab === "reportesimple" && <ReporteSimple data={data} update={update} />}
         {tab === "reportes" && <Reportes data={data} update={update} />}
       </main>
 
@@ -4398,6 +4400,277 @@ function Reembolsos({ data, update }) {
   );
 }
 
+/* ---------------- Reporte Simple ---------------- */
+function ReporteSimple({ data, update }) {
+  const [trabajoId, setTrabajoId] = useState("");
+  const [form, setForm] = useState({ descripcion: "", monto: "", fecha: todayISO(), categoria: "Materiales", pagadoPor: "" });
+
+  const trabajos = data.trabajos || [];
+  const socios = data.socios || [];
+  const cuentasEmpresa = (data.cuentas || []).filter((c) => !c.esPersonal && /max one|mb services/i.test(c.nombre || ""));
+  const opcionesPagador = [...socios.map((s) => s.nombre), ...cuentasEmpresa.map((c) => c.nombre)];
+  const trabajo = trabajos.find((t) => t.id === trabajoId);
+  const gastos = (data.gastosSimples || []).filter((g) => g.trabajoId === trabajoId).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
+  const totalGastos = gastos.reduce((s, g) => s + Number(g.monto || 0), 0);
+  const acordado = Number(trabajo?.estimado || 0);
+  const ganancia = acordado - totalGastos;
+
+  // Reembolso: lo que Boris o David pagaron de su bolsillo en este trabajo, y hay que devolverles.
+  const reembolsoPorSocio = {};
+  socios.forEach((s) => { reembolsoPorSocio[s.nombre] = gastos.filter((g) => g.pagadoPor === s.nombre).reduce((s2, g) => s2 + Number(g.monto || 0), 0); });
+  const reembolsoBoris = reembolsoPorSocio["Boris"] || 0;
+  const reembolsoDavid = reembolsoPorSocio["David"] || 0;
+  // Se resta primero (por dentro) lo ya adelantado, se reparte la mitad de lo que queda,
+  // y luego se le vuelve a sumar a cada entidad lo que le corresponde devolver.
+  const cuotaBase = (ganancia - reembolsoBoris - reembolsoDavid) / 2;
+
+  const agregarGasto = () => {
+    if (!trabajoId || !form.descripcion || !form.monto || !form.pagadoPor) return;
+    update((d) => {
+      if (!d.gastosSimples) d.gastosSimples = [];
+      d.gastosSimples.push({
+        id: uid(),
+        trabajoId,
+        descripcion: form.descripcion,
+        monto: Number(form.monto),
+        fecha: form.fecha,
+        categoria: form.categoria,
+        pagadoPor: form.pagadoPor,
+      });
+    });
+    setForm({ descripcion: "", monto: "", fecha: todayISO(), categoria: "Materiales", pagadoPor: "" });
+  };
+
+  const eliminarGasto = (id) => {
+    update((d) => { d.gastosSimples = (d.gastosSimples || []).filter((g) => g.id !== id); });
+  };
+
+  return (
+    <div>
+      <SectionTitle sub="Un desglose rápido de gastos por trabajo, sin tanto detalle.">Reporte Simple</SectionTitle>
+
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <div style={{ border: "1px solid #1B5E20", borderRadius: 6, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#1B5E20" }}>
+                <td className="py-2 px-3 text-[10px] font-bold uppercase" style={{ color: "#fff" }} colSpan={2}>Trabajos de Empresa</td>
+              </tr>
+            </thead>
+            <tbody>
+              {trabajos.filter((t) => !t.pagoPersonal).length === 0 && (
+                <tr><td colSpan={2} className="py-3 text-center text-xs" style={{ color: "#5B8A6A", background: "#EAF5EC" }}>Sin trabajos</td></tr>
+              )}
+              {trabajos.filter((t) => !t.pagoPersonal).map((t) => {
+                const seleccionado = trabajoId === t.id;
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => setTrabajoId(t.id)}
+                    style={{ background: seleccionado ? "#1B5E20" : "#EAF5EC", color: seleccionado ? "#fff" : "#1B5E20", borderBottom: "1px solid #fff", cursor: "pointer" }}
+                  >
+                    <td className="py-2 px-3 text-[12px] font-semibold">{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right">{t.cliente || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ border: "1px solid #1F3864", borderRadius: 6, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#1F3864" }}>
+                <td className="py-2 px-3 text-[10px] font-bold uppercase" style={{ color: "#fff" }} colSpan={2}>Trabajos Personales</td>
+              </tr>
+            </thead>
+            <tbody>
+              {trabajos.filter((t) => t.pagoPersonal).length === 0 && (
+                <tr><td colSpan={2} className="py-3 text-center text-xs" style={{ color: "#5A72A0", background: "#E7EEF9" }}>Sin trabajos</td></tr>
+              )}
+              {trabajos.filter((t) => t.pagoPersonal).map((t) => {
+                const seleccionado = trabajoId === t.id;
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => setTrabajoId(t.id)}
+                    style={{ background: seleccionado ? "#1F3864" : "#E7EEF9", color: seleccionado ? "#fff" : "#1F3864", borderBottom: "1px solid #fff", cursor: "pointer" }}
+                  >
+                    <td className="py-2 px-3 text-[12px] font-semibold">{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right">{t.cliente || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {trabajo && (
+        <div style={{ background: "#f5f4f0", borderRadius: 10, overflow: "hidden", border: "1px solid #e5e3dc" }}>
+          <div className="p-4" style={{ background: "#000", color: "#fff" }}>
+            <p className="text-[9px] uppercase tracking-wide mb-1" style={{ color: "#999" }}>Desglose de gastos</p>
+            <p className="text-[16px] font-bold">{trabajo.apodo || trabajo.nombre} {money(acordado)}{ganancia !== acordado ? " ya repartido" : ""}</p>
+          </div>
+
+          <div className="p-4" style={{ background: "#fff" }}>
+            {trabajo.cliente && (
+              <>
+                <p className="text-[11px] font-bold uppercase" style={{ color: "#1a1a1a" }}>{trabajo.cliente}</p>
+                <p className="text-[11px] mb-3" style={{ color: "#666" }}>
+                  {[trabajo.managerCliente, trabajo.direccion].filter(Boolean).join(" · ") || "—"}
+                </p>
+              </>
+            )}
+            {trabajo.descripcionTrabajo && trabajo.descripcionTrabajo.split("\n").filter((l) => l.trim()).length > 0 && (
+              <p className="text-[11px] mb-1" style={{ color: "#333" }}>
+                Trabajo realizado: {trabajo.descripcionTrabajo.split("\n").filter((l) => l.trim()).join(", ")}
+              </p>
+            )}
+            {trabajo.fecha && (
+              <p className="text-[10px] mb-3" style={{ color: "#999" }}>
+                {trabajo.fechaTerminado
+                  ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)} (${Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s))`
+                  : fmtDate(trabajo.fecha)}
+              </p>
+            )}
+
+            <div style={{ overflowX: "auto" }}>
+              <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: 10 }}>
+                    <td className="py-1.5">Fecha</td>
+                    <td className="py-1.5">Descripción</td>
+                    <td className="py-1.5">Categoría</td>
+                    <td className="py-1.5">Pagó</td>
+                    <td className="py-1.5 text-right">Monto</td>
+                    <td></td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gastos.length === 0 && (
+                    <tr><td colSpan={6} className="py-3 text-center text-xs" style={{ color: "#999" }}>Sin gastos registrados</td></tr>
+                  )}
+                  {gastos.map((g) => (
+                    <tr key={g.id} style={{ borderBottom: "1px solid #eee" }}>
+                      <td className="py-2 text-[12px]">{fmtDate(g.fecha)}</td>
+                      <td className="py-2 text-[12px]">{g.descripcion}</td>
+                      <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.categoria}</td>
+                      <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.pagadoPor}</td>
+                      <td className="py-2 text-[12px] text-right font-semibold" style={{ color: "#c0392b" }}>-{money(g.monto)}</td>
+                      <td className="py-2 text-right pl-2">
+                        <button onClick={() => eliminarGasto(g.id)} style={{ color: "#bbb", fontSize: 14 }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between text-[13px] pt-3">
+              <span>Acordado</span>
+              <span className="font-semibold">{money(acordado)}</span>
+            </div>
+            <div className="flex justify-between text-[13px] pb-2" style={{ color: "#c0392b" }}>
+              <span>Total Gastos</span>
+              <span className="font-semibold">-{money(totalGastos)}</span>
+            </div>
+            <div className="flex justify-between pt-2" style={{ borderTop: "2px solid #000" }}>
+              <span className="text-[15px] font-extrabold">GANANCIA</span>
+              <span className="text-[16px] font-extrabold" style={{ color: "#1B7A3D" }}>{money(ganancia)}</span>
+            </div>
+
+            <p className="text-[10px] uppercase tracking-wide mt-5 mb-2" style={{ color: "#999" }}>Reparto de ganancia (50/50)</p>
+            <div style={{ overflowX: "auto" }}>
+              <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: 9.5 }}>
+                    <td className="py-1.5">Entidad</td>
+                    <td className="py-1.5 text-right">Ganancia</td>
+                    <td className="py-1.5 text-right">Reembolso</td>
+                    <td className="py-1.5 text-right">Monto a pagar</td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ENTIDADES_REPARTO.map((e) => {
+                    const esMbServices = e.id === "entidad_mb_services";
+                    const reembolsoEntidad = esMbServices ? reembolsoBoris : reembolsoDavid;
+                    const montoEntidad = cuotaBase + reembolsoEntidad;
+                    return (
+                      <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <td className="py-2 text-[12px]">{e.nombre}</td>
+                        <td className="py-2 text-[12px] text-right">{money(cuotaBase)}</td>
+                        <td className="py-2 text-[12px] text-right">{money(reembolsoEntidad)}</td>
+                        <td className="py-2 text-[12px] text-right font-bold" style={{ color: "#1B7A3D" }}>{money(montoEntidad)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="p-4" style={{ background: "#fff", borderTop: "1px solid #e5e3dc" }}>
+            <p className="text-[11px] font-bold uppercase mb-3">+ Agregar línea de gasto</p>
+            <input
+              className="ledger-input w-full mb-2"
+              placeholder="Descripción — ej. Cemento, plomero, permiso..."
+              value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+            />
+            <div className="flex gap-2 mb-2">
+              <input
+                className="ledger-input flex-1"
+                type="number"
+                placeholder="Monto $"
+                value={form.monto}
+                onChange={(e) => setForm({ ...form, monto: e.target.value })}
+              />
+              <input
+                className="ledger-input flex-1"
+                type="date"
+                value={form.fecha}
+                onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+              />
+            </div>
+            <select
+              className="ledger-input w-full mb-3"
+              value={form.categoria}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+            >
+              <option value="Materiales">Materiales</option>
+              <option value="Mano de obra">Mano de obra</option>
+              <option value="Otro">Otro</option>
+            </select>
+            <p className="text-[10px] uppercase mb-1.5" style={{ color: "#999" }}>Pagado por</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {opcionesPagador.map((nombre) => (
+                <button
+                  key={nombre}
+                  className="py-2.5 rounded text-sm font-semibold"
+                  style={form.pagadoPor === nombre ? { background: "#000", color: "#fff" } : { background: "#fff", color: "#333", border: "1px solid #ddd" }}
+                  onClick={() => setForm({ ...form, pagadoPor: nombre })}
+                >
+                  {nombre}
+                </button>
+              ))}
+            </div>
+            <button
+              className="w-full py-3.5 rounded font-bold text-sm"
+              style={{ background: "#E8801A", color: "#fff" }}
+              onClick={agregarGasto}
+            >
+              + Agregar Gasto
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Reportes de cierre por trabajo ---------------- */
 function Reportes({ data, update }) {
   const [openId, setOpenId] = useState(null);
@@ -6258,8 +6531,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                   <thead>
                     <tr style={{ borderBottom: "1px solid #ddd" }}>
                       <td className="text-[9px] py-1" style={{ color: "#888" }}>{esMaterialGrupo ? "Material" : "Empleado"}</td>
-                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Fecha de pago</td>
-                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Método de pago</td>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Fecha</td>
                       <td className="text-[9px] py-1 text-right" style={{ color: "#888" }}>Monto</td>
                     </tr>
                   </thead>
@@ -6268,12 +6540,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
                       <tr key={item.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
                         <td className="text-[10.5px] py-1">{esMaterialGrupo ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra")}</td>
                         <td className="text-[10.5px] py-1">{fmtDate(item.fecha)}</td>
-                        <td className="text-[10.5px] py-1">{formaPagoTextoStandalone(item.formaPago, item.numeroCheque) || "—"}</td>
                         <td className="text-[10.5px] py-1 text-right">{money(esMaterialGrupo ? materialNeto(item) : Number(item.monto || 0))}</td>
                       </tr>
                     ))}
                     <tr>
-                      <td colSpan={3} className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>Total {g.nombre}</td>
+                      <td colSpan={2} className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>Total {g.nombre}</td>
                       <td className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>{money(g.total)}</td>
                     </tr>
                   </tbody>
@@ -6318,6 +6589,30 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           );
         })()}
       </div>
+
+      {listaReposiciones.length > 0 && (
+        <div className="mb-6">
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: GREEN }}>Reposición de caja chica (ya cubierto con el pago del cliente)</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <Th>Cuenta</Th>
+                <Th>Concepto</Th>
+                <Th right>Monto</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {listaReposiciones.map((r) => (
+                <tr key={r.nombre}>
+                  <Td>{r.nombre}</Td>
+                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
+                  <Td right bold><span style={{ color: GREEN }}>{money(r.total)}</span></Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
