@@ -228,6 +228,7 @@ const TABS = [
   { id: "materiales", label: "Materiales", icon: Package },
   { id: "cuentas", label: "Cuentas", icon: Landmark },
   { id: "reembolsos", label: "Reembolsos", icon: ArrowLeftRight },
+  { id: "reportesimple", label: "Reporte Simple", icon: ClipboardList },
   { id: "reportes", label: "Reportes de cierre", icon: ClipboardList },
 ];
 
@@ -418,6 +419,7 @@ export default function App() {
         {tab === "materiales" && <Materiales data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "cuentas" && <Cuentas data={data} update={update} onViewPhoto={setLightbox} />}
         {tab === "reembolsos" && <Reembolsos data={data} update={update} />}
+        {tab === "reportesimple" && <ReporteSimple data={data} update={update} />}
         {tab === "reportes" && <Reportes data={data} update={update} />}
       </main>
 
@@ -462,9 +464,27 @@ function FontImport() {
       .stamp{font-family:'Special Elite',monospace;letter-spacing:.08em}
       .recibo-linea{border-bottom:2px dashed #333;margin:20px 0}
       @media print {
+        @page { size: auto; margin: 0.3in; }
         body * { visibility: hidden; }
         #recibo-print, #recibo-print * { visibility: visible; }
-        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; }
+        .fixed { position: static !important; overflow: visible !important; height: auto !important; max-height: none !important; }
+        #recibo-print { position: absolute; top: 0; left: 0; width: 100%; overflow: visible !important; height: auto !important; max-height: none !important; font-size: 10.5px !important; line-height: 1.2 !important; padding: 6px !important; }
+        #recibo-print .mb-6 { margin-bottom: 6px !important; }
+        #recibo-print .mb-4 { margin-bottom: 5px !important; }
+        #recibo-print .mb-3 { margin-bottom: 4px !important; }
+        #recibo-print .mb-2 { margin-bottom: 3px !important; }
+        #recibo-print .p-3 { padding: 4px !important; }
+        #recibo-print .py-2\\.5 { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .py-2 { padding-top: 2px !important; padding-bottom: 2px !important; }
+        #recibo-print .py-1\\.5 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print .py-1 { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print td, #recibo-print th { padding-top: 1px !important; padding-bottom: 1px !important; }
+        #recibo-print .text-\\[16px\\] { font-size: 12px !important; }
+        #recibo-print .text-\\[14px\\], #recibo-print .text-\\[15px\\] { font-size: 11px !important; }
+        #recibo-print .text-\\[13px\\] { font-size: 10px !important; }
+        #recibo-print .text-sm { font-size: 9.5px !important; }
+        #recibo-print .text-\\[11px\\], #recibo-print .text-xs { font-size: 8.5px !important; }
+        #recibo-print .text-\\[10px\\] { font-size: 7.5px !important; }
         .no-print { display: none !important; }
       }
     `}</style>
@@ -1069,10 +1089,6 @@ function Trabajos({ data, update, onViewPhoto }) {
             })
             .map((t, idx) => {
           const c = calcTrabajo(t, data);
-          const materialesT = data.materiales.filter((m) => m.trabajoId === t.id);
-          const nominaT = data.nomina.filter((n) => n.trabajoId === t.id);
-          const totalGastosReporte = c.materiales + c.manoDeObra;
-          const gananciaReporte = c.tienePagoReal ? c.gananciaReal : c.ganancia;
           const open = openId === t.id;
           return (
             <div key={t.id} className="card">
@@ -1119,73 +1135,106 @@ function Trabajos({ data, update, onViewPhoto }) {
                 </div>
               </div>
               {open && (
-                <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3 space-y-3">
+                <div style={{ borderTop: `1px dashed ${LINE}` }} className="p-4 pt-3 space-y-1">
                   <label className="text-[11px] text-[#7A7263] block mb-0.5">Nombre del trabajo</label>
-                  <div className="flex items-center gap-2 border" style={{ borderColor: LINE }}>
+                  <div className="flex items-center gap-2 border mb-3" style={{ borderColor: LINE }}>
                     <Briefcase size={14} className="text-[#7A7263] ml-2 shrink-0" />
-                    <input className="flex-1 py-1.5 pr-2 text-xs outline-none" value={t.nombre || ""} onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).nombre = e.target.value; })} />
+                    <input
+                      className="flex-1 py-1.5 pr-2 text-xs outline-none"
+                      value={t.nombre || ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).nombre = e.target.value; })}
+                    />
                   </div>
-                  <div>
+                  <div className="mb-1">
                     <label className="text-[11px] text-[#7A7263] block mb-0.5">Estimado ($)</label>
-                    <input className="ledger-input text-xs" type="number" value={t.estimado ?? ""} onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimado = e.target.value; })} />
+                    <input
+                      className="ledger-input text-xs"
+                      type="number"
+                      value={t.estimado ?? ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimado = e.target.value; })}
+                    />
                   </div>
-
-                  <div className="card overflow-hidden" style={{ background: "#F5F4F0", borderColor: "#E5E3DC" }}>
-                    <div style={{ background: "#000", color: "#fff", padding: "14px 16px" }}>
-                      <p style={{ fontSize: "9px", letterSpacing: "1px", color: "#999", margin: "0 0 2px", textTransform: "uppercase" }}>Desglose de gastos</p>
-                      <p style={{ fontSize: "15px", fontWeight: 700, margin: 0 }}>{t.apodo || t.nombre} {money(Number(t.estimado || 0))}</p>
+                  <Row label="Materiales gastados" value={money(c.materiales)} accent={RED} />
+                  {c.desglose.filter((d) => d.tipoLabel === "Materiales").length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.desglose.filter((d) => d.tipoLabel === "Materiales").map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
+                          <span>{d.nombre} · {d.tipoLabel}</span>
+                          <span className="mono">{money(d.monto)}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ background: "#fff", padding: "16px" }}>
-                      <div className="overflow-x-auto">
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "10.5px", minWidth: "520px" }}>
-                          <thead><tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: "9px" }}><td style={{ padding: "4px 0" }}>Fecha</td><td style={{ padding: "4px 0" }}>Descripción</td><td style={{ padding: "4px 0" }}>Categoría</td><td style={{ padding: "4px 0" }}>Pagó</td><td style={{ padding: "4px 0", textAlign: "right" }}>Monto</td></tr></thead>
-                          <tbody>
-                            {materialesT.map((m) => (
-                              <tr key={`mat-${m.id}`} style={{ borderBottom: "1px solid #eee" }}>
-                                <td style={{ padding: "6px 0" }}>{fmtDate(m.fecha)}</td>
-                                <td style={{ padding: "6px 0" }}>{m.descripcion || "Material"}{m.numeroInvoice ? ` · Invoice #${m.numeroInvoice}` : ""}</td>
-                                <td style={{ padding: "6px 0" }}>Materiales</td>
-                                <td style={{ padding: "6px 0", color: "#666" }}>{pagadorNombre(data, m.pagadoPor, m.cuentaId)}</td>
-                                <td style={{ padding: "6px 0", textAlign: "right", color: RED }}>-{money(materialNeto(m))}</td>
-                              </tr>
-                            ))}
-                            {nominaT.map((n) => (
-                              <tr key={`nom-${n.id}`} style={{ borderBottom: "1px solid #eee" }}>
-                                <td style={{ padding: "6px 0" }}>{fmtDate(n.fecha)}</td>
-                                <td style={{ padding: "6px 0" }}>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Nómina"}</td>
-                                <td style={{ padding: "6px 0" }}>Mano de obra</td>
-                                <td style={{ padding: "6px 0", color: "#666" }}>{pagadorNombre(data, n.pagadoPor, n.cuentaId)}</td>
-                                <td style={{ padding: "6px 0", textAlign: "right", color: RED }}>-{money(Number(n.monto || 0))}</td>
-                              </tr>
-                            ))}
-                            {materialesT.length === 0 && nominaT.length === 0 && <tr><td colSpan="5" style={{ padding: "10px 0", color: "#999" }}>No hay gastos registrados para este trabajo.</td></tr>}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", paddingTop: "8px" }}><span>Acordado</span><span style={{ fontWeight: 600 }}>{money(Number(t.estimado || 0))}</span></div>
-                      {c.tienePagoReal && <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", paddingTop: "4px" }}><span>Pagó el cliente</span><span style={{ fontWeight: 600 }}>{money(Number(t.estimadoPagado || 0))}</span></div>}
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: RED, paddingBottom: "6px", paddingTop: "4px" }}><span>Total Gastos</span><span style={{ fontWeight: 600 }}>-{money(totalGastosReporte)}</span></div>
-                      <div style={{ display: "flex", justifyContent: "space-between", borderTop: "2px solid #000", paddingTop: "6px" }}><span style={{ fontSize: "14px", fontWeight: 800 }}>GANANCIA</span><span style={{ fontSize: "15px", fontWeight: 800, color: gananciaReporte >= 0 ? GREEN : RED }}>{money(gananciaReporte)}</span></div>
-                      <p style={{ fontSize: "9.5px", color: "#999", textTransform: "uppercase", margin: "14px 0 6px" }}>Reparto de ganancia (50/50)</p>
-                      <div className="overflow-x-auto">
-                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px", minWidth: "430px" }}>
-                          <thead><tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: "9px" }}><td style={{ padding: "3px 0" }}>Entidad</td><td style={{ padding: "3px 0", textAlign: "right" }}>Ganancia</td><td style={{ padding: "3px 0", textAlign: "right" }}>Reembolso</td><td style={{ padding: "3px 0", textAlign: "right" }}>Monto a pagar</td></tr></thead>
-                          <tbody>{ENTIDADES_REPARTO.map((entidad, entidadIdx) => {
-                            const socio = data.socios[entidadIdx];
-                            const reembolso = socio ? c.reembolsoDeSocio(socio.id) : (entidadIdx === 0 ? c.totalReembolsosTrabajo : 0);
-                            const gananciaEntidad = c.mitadResto;
-                            return <tr key={entidad.id} style={{ borderBottom: entidadIdx === 0 ? "1px solid #eee" : "none" }}><td style={{ padding: "6px 0" }}>{entidad.nombre}</td><td style={{ padding: "6px 0", textAlign: "right" }}>{money(gananciaEntidad)}</td><td style={{ padding: "6px 0", textAlign: "right" }}>{money(reembolso)}</td><td style={{ padding: "6px 0", textAlign: "right", fontWeight: 700, color: GREEN }}>{money(gananciaEntidad + reembolso)}</td></tr>;
-                          })}</tbody>
-                        </table>
-                      </div>
+                  )}
+                  <Row label="Mano de obra / nómina" value={money(c.manoDeObra)} accent={RED} />
+                  {c.desglose.filter((d) => d.tipoLabel === "Nómina").length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.desglose.filter((d) => d.tipoLabel === "Nómina").map((d, i) => (
+                        <div key={i} className="flex justify-between text-[11px] text-[#7A7263]">
+                          <span>{d.nombre} · {d.tipoLabel}</span>
+                          <span className="mono">{money(d.monto)}</span>
+                        </div>
+                      ))}
                     </div>
-                  </div>
+                  )}
+                  {c.reembolsoPorPersona.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.reembolsoPorPersona.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: AMBER }}>
+                          <span>Reembolsar a {r.nombre} por {r.tipoLabel}</span>
+                          <span className="mono">{money(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {c.reposicionesCajaChica.length > 0 && (
+                    <div className="pl-3 mb-1 space-y-0.5">
+                      {c.reposicionesCajaChica.map((r, i) => (
+                        <div key={i} className="flex justify-between text-[11px]" style={{ color: GREEN }}>
+                          <span>Reposición de caja chica — {r.nombre} ({r.tipoLabel})</span>
+                          <span className="mono">{money(r.monto)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Row label="Ganancia según estimado" value={money(c.ganancia)} bold={!c.tienePagoReal} accent={c.ganancia >= 0 ? GREEN : RED} />
 
                   <div className="mt-2 mb-1">
                     <label className="text-[11px] text-[#7A7263] block mb-0.5">Total final que pagó el cliente (el número completo que acordaron)</label>
-                    <input className="ledger-input text-xs" type="number" placeholder="Déjalo vacío si pagaron el estimado completo" value={t.estimadoPagado ?? ""} onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimadoPagado = e.target.value; })} />
+                    <input
+                      className="ledger-input text-xs"
+                      type="number"
+                      placeholder="Déjalo vacío si pagaron el estimado completo"
+                      value={t.estimadoPagado ?? ""}
+                      onChange={(e) => update((d) => { d.trabajos.find((x) => x.id === t.id).estimadoPagado = e.target.value; })}
+                    />
                   </div>
-                  {c.tienePagoReal && <Row label="Ganancia real (según lo pagado)" value={money(c.gananciaReal)} bold accent={c.gananciaReal >= 0 ? GREEN : RED} />}
+                  {c.tienePagoReal && (
+                    <Row label="Ganancia real (según lo pagado)" value={money(c.gananciaReal)} bold accent={c.gananciaReal >= 0 ? GREEN : RED} />
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    {ENTIDADES_REPARTO.map((s) => (
+                      <div key={s.id} className="bg-[#F3EEE4] p-2 text-center">
+                        <div className="text-[10px] text-[#7A7263] uppercase">{s.nombre}</div>
+                        <div className="mono text-sm font-semibold">{money(c.mitadResto)}</div>
+                        <div className="text-[9px] text-[#7A7263]">mitad de la ganancia (50/50)</div>
+                      </div>
+                    ))}
+                  </div>
+                  {c.totalReembolsosTrabajo > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-1.5">
+                      {data.socios.map((s) => {
+                        const reemb = c.reembolsoDeSocio(s.id);
+                        if (reemb <= 0) return <div key={s.id} />;
+                        return (
+                          <div key={s.id} className="p-2 text-center" style={{ background: "#FBF3E3", border: "1px solid #E8D9A8" }}>
+                            <div className="text-[10px] uppercase" style={{ color: "#8A6416" }}>+ reembolso a {s.nombre}</div>
+                            <div className="mono text-sm font-semibold" style={{ color: "#8A6416" }}>{money(reemb)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   <label className="text-[11px] text-[#7A7263] block mb-0.5 mt-3">Trabajo a realizar en ese lugar</label>
                   <div className="mb-3">
@@ -1766,7 +1815,7 @@ function Bitacora({ data, update }) {
           <div className="flex items-center gap-2 mb-2">
             <select className="ledger-input flex-1" value={filtroTrabajo} onChange={(e) => setFiltroTrabajo(e.target.value)}>
               <option value="">Todos los trabajos</option>
-              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</option>)}
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
             </select>
             {filtroTrabajo && (
               <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajo("")}>
@@ -1805,7 +1854,7 @@ function Bitacora({ data, update }) {
         <div className="card p-4 mb-4 space-y-2">
           <select className="ledger-input" value={form.trabajoId || ""} onChange={(e) => setForm({ ...form, trabajoId: e.target.value })}>
             <option value="">Trabajo…</option>
-            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
           </select>
           <input className="ledger-input" type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           <textarea
@@ -2245,6 +2294,7 @@ function Nomina({ data, update }) {
   const [payForm, setPayForm] = useState(null);
   const [editandoPagoId, setEditandoPagoId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [filtroTrabajoNomina, setFiltroTrabajoNomina] = useState("");
   const turnoHoy = socioEnTurno(data, todayISO());
 
   const addEmpleado = () => {
@@ -2388,7 +2438,7 @@ function Nomina({ data, update }) {
                 }}
               >
                 <option value="">Trabajo (opcional)…</option>
-                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
               </select>
               {payForm.trabajoId && socioTurnoNominaTrabajo(data, payForm.trabajoId) && (
                 <p className="text-[11px] text-[#7A7263]">
@@ -2469,8 +2519,23 @@ function Nomina({ data, update }) {
 
       <div className="card p-4 mt-4">
         <div className="stamp text-[13px] text-[#7A7263] mb-3">HISTORIAL DE PAGOS</div>
+        {data.trabajos.length > 0 && (
+          <div className="flex items-center gap-2 mb-3">
+            <select className="ledger-input flex-1" value={filtroTrabajoNomina} onChange={(e) => setFiltroTrabajoNomina(e.target.value)}>
+              <option value="">Filtrar por trabajo — todos</option>
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
+            </select>
+            {filtroTrabajoNomina && (
+              <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajoNomina("")}>
+                Quitar filtro
+              </button>
+            )}
+          </div>
+        )}
         {data.nomina.length === 0 && <Empty text="Sin pagos registrados." />}
-        {[...data.nomina].sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((n) => {
+        {[...data.nomina]
+          .filter((n) => !filtroTrabajoNomina || n.trabajoId === filtroTrabajoNomina)
+          .sort((a, b) => (a.fecha < b.fecha ? 1 : -1)).map((n) => {
           const emp = data.empleados.find((e) => e.id === n.empleadoId);
           const trab = data.trabajos.find((t) => t.id === n.trabajoId);
           const editando = editandoPagoId === n.id;
@@ -2484,7 +2549,7 @@ function Nomina({ data, update }) {
                   </select>
                   <select className="ledger-input text-xs" value={editForm.trabajoId || ""} onChange={(e) => setEditForm({ ...editForm, trabajoId: e.target.value })}>
                     <option value="">Trabajo (opcional)…</option>
-                    {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                    {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                   </select>
                   <input className="ledger-input text-xs" type="number" placeholder="Monto" value={editForm.monto || ""} onChange={(e) => setEditForm({ ...editForm, monto: e.target.value })} />
                   <input className="ledger-input text-xs" type="date" value={editForm.fecha || ""} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
@@ -3011,7 +3076,7 @@ function Materiales({ data, update, onViewPhoto }) {
               }}
             >
               <option value="">Trabajo…</option>
-              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+              {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
             </select>
             {scan.trabajoId && socioTurnoMaterial(data, scan.trabajoId) && (
               <p className="text-[11px] text-[#7A7263]">
@@ -3078,7 +3143,7 @@ function Materiales({ data, update, onViewPhoto }) {
             }}
           >
             <option value="">Trabajo…</option>
-            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
           </select>
           {form.trabajoId && socioTurnoMaterial(data, form.trabajoId) && (
             <p className="text-[11px] text-[#7A7263]">
@@ -3274,7 +3339,7 @@ function Materiales({ data, update, onViewPhoto }) {
                       <div className="border p-2 mt-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
                         <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
                           <option value="">Trabajo…</option>
-                          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                          {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                         </select>
                         <select
                           className="ledger-input text-xs"
@@ -3430,7 +3495,7 @@ function Materiales({ data, update, onViewPhoto }) {
                         <div className="border p-2 mt-1 mb-1 space-y-1.5" style={{ borderColor: AMBER, background: "#FBF8F2" }}>
                           <select className="ledger-input text-xs" value={editMaterialForm.trabajoId || ""} onChange={(e) => setEditMaterialForm({ ...editMaterialForm, trabajoId: e.target.value })}>
                             <option value="">Trabajo…</option>
-                            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                            {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
                           </select>
                           <select
                             className="ledger-input text-xs"
@@ -3977,7 +4042,7 @@ function Cuentas({ data, update, onViewPhoto }) {
               </select>
               <select className="ledger-input" value={incomeForm.trabajoId || ""} onChange={(e) => setIncomeForm({ ...incomeForm, trabajoId: e.target.value })}>
                 <option value="">Trabajo relacionado (opcional)…</option>
-                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.apodo || t.nombre}</option>)}
+                {data.trabajos.map((t) => <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>)}
               </select>
               <input className="ledger-input" type="number" placeholder="Monto" value={incomeForm.monto || ""} onChange={(e) => setIncomeForm({ ...incomeForm, monto: e.target.value })} />
               <label className="text-[11px] text-[#7A7263] block mb-0.5">{incomeForm.estado === "pendiente" ? "Fecha en que se registró" : "Fecha en que se recibió"}</label>
@@ -4335,6 +4400,310 @@ function Reembolsos({ data, update }) {
   );
 }
 
+/* ---------------- Reporte Simple ---------------- */
+function ReporteSimple({ data, update }) {
+  const [trabajoId, setTrabajoId] = useState("");
+  const [form, setForm] = useState({ descripcion: "", monto: "", fecha: todayISO(), categoria: "Materiales", pagadoPor: "" });
+
+  const trabajos = data.trabajos || [];
+  const socios = data.socios || [];
+  const cuentasEmpresa = (data.cuentas || []).filter((c) => !c.esPersonal && /max one|mb services/i.test(c.nombre || ""));
+  const opcionesPagador = [...socios.map((s) => s.nombre), ...cuentasEmpresa.map((c) => c.nombre)];
+  const trabajo = trabajos.find((t) => t.id === trabajoId);
+  const gastos = (data.gastosSimples || []).filter((g) => g.trabajoId === trabajoId).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const concluido = (data.reporteSimpleConcluidos || []).includes(trabajoId);
+
+  const toggleConcluido = () => {
+    update((d) => {
+      if (!d.reporteSimpleConcluidos) d.reporteSimpleConcluidos = [];
+      if (d.reporteSimpleConcluidos.includes(trabajoId)) {
+        d.reporteSimpleConcluidos = d.reporteSimpleConcluidos.filter((id) => id !== trabajoId);
+      } else {
+        d.reporteSimpleConcluidos.push(trabajoId);
+      }
+    });
+  };
+
+  const totalGastos = gastos.reduce((s, g) => s + Number(g.monto || 0), 0);
+  const acordado = Number(trabajo?.estimado || 0);
+  const ganancia = acordado - totalGastos;
+
+  // Reembolso: lo que Boris o David pagaron de su bolsillo en este trabajo, y hay que devolverles.
+  const reembolsoPorSocio = {};
+  socios.forEach((s) => { reembolsoPorSocio[s.nombre] = gastos.filter((g) => g.pagadoPor === s.nombre).reduce((s2, g) => s2 + Number(g.monto || 0), 0); });
+  const reembolsoBoris = reembolsoPorSocio["Boris"] || 0;
+  const reembolsoDavid = reembolsoPorSocio["David"] || 0;
+  // Se resta primero (por dentro) lo ya adelantado, se reparte la mitad de lo que queda,
+  // y luego se le vuelve a sumar a cada entidad lo que le corresponde devolver.
+  const cuotaBase = (ganancia - reembolsoBoris - reembolsoDavid) / 2;
+
+  const agregarGasto = () => {
+    if (!trabajoId || !form.descripcion || !form.monto || !form.pagadoPor) return;
+    update((d) => {
+      if (!d.gastosSimples) d.gastosSimples = [];
+      d.gastosSimples.push({
+        id: uid(),
+        trabajoId,
+        descripcion: form.descripcion,
+        monto: Number(form.monto),
+        fecha: form.fecha,
+        categoria: form.categoria,
+        pagadoPor: form.pagadoPor,
+      });
+    });
+    setForm({ descripcion: "", monto: "", fecha: todayISO(), categoria: "Materiales", pagadoPor: "" });
+  };
+
+  const eliminarGasto = (id) => {
+    update((d) => { d.gastosSimples = (d.gastosSimples || []).filter((g) => g.id !== id); });
+  };
+
+  return (
+    <div>
+      <SectionTitle sub="Un desglose rápido de gastos por trabajo, sin tanto detalle.">Reporte Simple</SectionTitle>
+
+      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+        <div style={{ border: "1px solid #1B5E20", borderRadius: 6, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#1B5E20" }}>
+                <td className="py-2 px-3 text-[10px] font-bold uppercase" style={{ color: "#fff" }} colSpan={2}>Trabajos de Empresa</td>
+              </tr>
+            </thead>
+            <tbody>
+              {trabajos.filter((t) => !t.pagoPersonal).length === 0 && (
+                <tr><td colSpan={2} className="py-3 text-center text-xs" style={{ color: "#5B8A6A", background: "#EAF5EC" }}>Sin trabajos</td></tr>
+              )}
+              {trabajos.filter((t) => !t.pagoPersonal).map((t) => {
+                const seleccionado = trabajoId === t.id;
+                const conc = (data.reporteSimpleConcluidos || []).includes(t.id);
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => setTrabajoId(t.id)}
+                    style={{ background: seleccionado ? "#1B5E20" : "#EAF5EC", color: seleccionado ? "#fff" : "#1B5E20", borderBottom: "1px solid #fff", cursor: "pointer" }}
+                  >
+                    <td className="py-2 px-3 text-[12px] font-semibold" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.cliente || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{ border: "1px solid #1F3864", borderRadius: 6, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#1F3864" }}>
+                <td className="py-2 px-3 text-[10px] font-bold uppercase" style={{ color: "#fff" }} colSpan={2}>Trabajos Personales</td>
+              </tr>
+            </thead>
+            <tbody>
+              {trabajos.filter((t) => t.pagoPersonal).length === 0 && (
+                <tr><td colSpan={2} className="py-3 text-center text-xs" style={{ color: "#5A72A0", background: "#E7EEF9" }}>Sin trabajos</td></tr>
+              )}
+              {trabajos.filter((t) => t.pagoPersonal).map((t) => {
+                const seleccionado = trabajoId === t.id;
+                const conc = (data.reporteSimpleConcluidos || []).includes(t.id);
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => setTrabajoId(t.id)}
+                    style={{ background: seleccionado ? "#1F3864" : "#E7EEF9", color: seleccionado ? "#fff" : "#1F3864", borderBottom: "1px solid #fff", cursor: "pointer" }}
+                  >
+                    <td className="py-2 px-3 text-[12px] font-semibold" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.cliente || "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {trabajo && (
+        <>
+          <div className="no-print flex justify-end gap-2 mb-3">
+            <button
+              onClick={toggleConcluido}
+              className="btn-primary"
+              style={concluido ? { background: "#6B6B6B" } : {}}
+            >
+              {concluido ? "Reabrir" : "Guardar / Marcar concluido"}
+            </button>
+            <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
+          </div>
+          <div id="recibo-print" style={{ background: "#f5f4f0", borderRadius: 10, overflow: "hidden", border: "1px solid #e5e3dc" }}>
+          <div className="p-4" style={{ background: "#000", color: "#fff", position: "relative" }}>
+            <p className="text-[9px] uppercase tracking-wide mb-1" style={{ color: "#999" }}>Desglose de gastos</p>
+            <p className="text-[16px] font-bold" style={concluido ? { textDecoration: "line-through", textDecorationColor: "#c0392b", textDecorationThickness: 2 } : {}}>
+              {trabajo.apodo || trabajo.nombre} {money(acordado)}{ganancia !== acordado ? " ya repartido" : ""}
+            </p>
+            {concluido && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 uppercase" style={{ background: "#c0392b", color: "#fff", borderRadius: 3, marginTop: 4, display: "inline-block" }}>
+                ✓ Concluido
+              </span>
+            )}
+          </div>
+
+          <div className="p-4" style={{ background: "#fff" }}>
+            {trabajo.cliente && (
+              <>
+                <p className="text-[11px] font-bold uppercase" style={{ color: "#1a1a1a" }}>{trabajo.cliente}</p>
+                <p className="text-[11px] mb-3" style={{ color: "#666" }}>
+                  {[trabajo.managerCliente, trabajo.direccion].filter(Boolean).join(" · ") || "—"}
+                </p>
+              </>
+            )}
+            {trabajo.descripcionTrabajo && trabajo.descripcionTrabajo.split("\n").filter((l) => l.trim()).length > 0 && (
+              <p className="text-[11px] mb-1" style={{ color: "#333" }}>
+                Trabajo realizado: {trabajo.descripcionTrabajo.split("\n").filter((l) => l.trim()).join(", ")}
+              </p>
+            )}
+            {trabajo.fecha && (
+              <p className="text-[10px] mb-3" style={{ color: "#999" }}>
+                {trabajo.fechaTerminado
+                  ? `${fmtDate(trabajo.fecha)} — ${fmtDate(trabajo.fechaTerminado)} (${Math.max(1, Math.round((new Date(trabajo.fechaTerminado) - new Date(trabajo.fecha)) / 86400000) + 1)} día(s))`
+                  : fmtDate(trabajo.fecha)}
+              </p>
+            )}
+
+            <div style={{ overflowX: "auto" }}>
+              <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: 10 }}>
+                    <td className="py-1.5">Fecha</td>
+                    <td className="py-1.5">Descripción</td>
+                    <td className="py-1.5">Categoría</td>
+                    <td className="py-1.5">Pagó</td>
+                    <td className="py-1.5 text-right">Monto</td>
+                    <td></td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gastos.length === 0 && (
+                    <tr><td colSpan={6} className="py-3 text-center text-xs" style={{ color: "#999" }}>Sin gastos registrados</td></tr>
+                  )}
+                  {gastos.map((g) => (
+                    <tr key={g.id} style={{ borderBottom: "1px solid #eee" }}>
+                      <td className="py-2 text-[12px]">{fmtDate(g.fecha)}</td>
+                      <td className="py-2 text-[12px]">{g.descripcion}</td>
+                      <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.categoria}</td>
+                      <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.pagadoPor}</td>
+                      <td className="py-2 text-[12px] text-right font-semibold" style={{ color: "#c0392b" }}>-{money(g.monto)}</td>
+                      <td className="py-2 text-right pl-2">
+                        <button onClick={() => eliminarGasto(g.id)} style={{ color: "#bbb", fontSize: 14 }}>✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-between text-[13px] pt-3">
+              <span>Acordado</span>
+              <span className="font-semibold">{money(acordado)}</span>
+            </div>
+            <div className="flex justify-between text-[13px] pb-2" style={{ color: "#c0392b" }}>
+              <span>Total Gastos</span>
+              <span className="font-semibold">-{money(totalGastos)}</span>
+            </div>
+            <div className="flex justify-between pt-2" style={{ borderTop: "2px solid #000" }}>
+              <span className="text-[15px] font-extrabold">GANANCIA</span>
+              <span className="text-[16px] font-extrabold" style={{ color: "#1B7A3D" }}>{money(ganancia)}</span>
+            </div>
+
+            <p className="text-[10px] uppercase tracking-wide mt-5 mb-2" style={{ color: "#999" }}>Reparto de ganancia (50/50)</p>
+            <div style={{ overflowX: "auto" }}>
+              <table className="w-full" style={{ borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid #333", color: "#888", fontSize: 9.5 }}>
+                    <td className="py-1.5">Entidad</td>
+                    <td className="py-1.5 text-right">Ganancia</td>
+                    <td className="py-1.5 text-right">Reembolso</td>
+                    <td className="py-1.5 text-right">Monto a pagar</td>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ENTIDADES_REPARTO.map((e) => {
+                    const esMbServices = e.id === "entidad_mb_services";
+                    const reembolsoEntidad = esMbServices ? reembolsoBoris : reembolsoDavid;
+                    const montoEntidad = cuotaBase + reembolsoEntidad;
+                    return (
+                      <tr key={e.id} style={{ borderBottom: "1px solid #eee" }}>
+                        <td className="py-2 text-[12px]">{e.nombre}</td>
+                        <td className="py-2 text-[12px] text-right">{money(cuotaBase)}</td>
+                        <td className="py-2 text-[12px] text-right">{money(reembolsoEntidad)}</td>
+                        <td className="py-2 text-[12px] text-right font-bold" style={{ color: "#1B7A3D" }}>{money(montoEntidad)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          </div>
+
+          <div className="p-4 no-print" style={{ background: "#fff", borderTop: "1px solid #e5e3dc" }}>
+            <p className="text-[11px] font-bold uppercase mb-3">+ Agregar línea de gasto</p>
+            <input
+              className="ledger-input w-full mb-2"
+              placeholder="Descripción — ej. Cemento, plomero, permiso..."
+              value={form.descripcion}
+              onChange={(e) => setForm({ ...form, descripcion: e.target.value })}
+            />
+            <div className="flex gap-2 mb-2">
+              <input
+                className="ledger-input flex-1"
+                type="number"
+                placeholder="Monto $"
+                value={form.monto}
+                onChange={(e) => setForm({ ...form, monto: e.target.value })}
+              />
+              <input
+                className="ledger-input flex-1"
+                type="date"
+                value={form.fecha}
+                onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+              />
+            </div>
+            <select
+              className="ledger-input w-full mb-3"
+              value={form.categoria}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+            >
+              <option value="Materiales">Materiales</option>
+              <option value="Mano de obra">Mano de obra</option>
+              <option value="Otro">Otro</option>
+            </select>
+            <p className="text-[10px] uppercase mb-1.5" style={{ color: "#999" }}>Pagado por</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {opcionesPagador.map((nombre) => (
+                <button
+                  key={nombre}
+                  className="py-2.5 rounded text-sm font-semibold"
+                  style={form.pagadoPor === nombre ? { background: "#000", color: "#fff" } : { background: "#fff", color: "#333", border: "1px solid #ddd" }}
+                  onClick={() => setForm({ ...form, pagadoPor: nombre })}
+                >
+                  {nombre}
+                </button>
+              ))}
+            </div>
+            <button
+              className="w-full py-3.5 rounded font-bold text-sm"
+              style={{ background: "#E8801A", color: "#fff" }}
+              onClick={agregarGasto}
+            >
+              + Agregar Gasto
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Reportes de cierre por trabajo ---------------- */
 function Reportes({ data, update }) {
   const [openId, setOpenId] = useState(null);
@@ -4343,11 +4712,13 @@ function Reportes({ data, update }) {
   const [pagosPersonalTrabajo, setPagosPersonalTrabajo] = useState(null);
   const [mostrarCarpeta, setMostrarCarpeta] = useState(false);
   const [mostrarCarpetaPersonal, setMostrarCarpetaPersonal] = useState(false);
+  const [filtroTrabajoReportes, setFiltroTrabajoReportes] = useState("");
 
   const trabajosCerrados = [...data.trabajos]
     .filter((t) => t.estado === "cerrado")
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivado)
     .filter((t) => !data.reportes.find((r) => r.trabajoId === t.id)?.archivadoPersonal)
+    .filter((t) => !filtroTrabajoReportes || t.id === filtroTrabajoReportes)
     .sort((a, b) => {
       const ra = data.reportes.find((r) => r.trabajoId === a.id);
       const rb = data.reportes.find((r) => r.trabajoId === b.id);
@@ -4428,6 +4799,21 @@ function Reportes({ data, update }) {
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
           <div className="stamp text-[13px] text-[#7A7263] mb-3">CIERRE EMPRESA</div>
+          {data.trabajos.filter((t) => t.estado === "cerrado").length > 0 && (
+            <div className="flex items-center gap-2 mb-3">
+              <select className="ledger-input flex-1 text-xs" value={filtroTrabajoReportes} onChange={(e) => setFiltroTrabajoReportes(e.target.value)}>
+                <option value="">Buscar un trabajo — todos</option>
+                {data.trabajos.filter((t) => t.estado === "cerrado").map((t) => (
+                  <option key={t.id} value={t.id}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}{t.cliente ? ` (${t.cliente})` : ""}</option>
+                ))}
+              </select>
+              {filtroTrabajoReportes && (
+                <button className="text-[11px] text-[#7A7263] underline whitespace-nowrap" onClick={() => setFiltroTrabajoReportes("")}>
+                  Quitar
+                </button>
+              )}
+            </div>
+          )}
       {trabajosCerrados.length === 0 && (
         <Empty text="Aún no hay trabajos cerrados. Marca un trabajo como 'Cerrado' en la pestaña Trabajos para generar su reporte." />
       )}
@@ -5168,25 +5554,53 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
   // Mano de obra ligada a este trabajo, con quién puso el dinero de cada pago.
   // Regla: se separa según la cuenta elegida al registrar el pago, PERO si se marcó "esGastoEmpresa"
   // (aunque salió de una cuenta personal), va directo al reporte de empresa sin importar la cuenta.
+  // En el reporte "personal" también se pueden agregar a mano otros gastos (marcados con
+  // incluidoEnPersonal), para que tú elijas cuáles quieres ver ahí, sin que salgan todos automático.
   const nominaT = data.nomina.filter((n) => {
     if (n.trabajoId !== trabajo.id) return false;
+    if (tipo === "personal" && n.incluidoEnPersonal) return true;
     if (n.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === n.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
-  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
-  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
-  const nominaMassielPagada = data.nomina
-    .filter((n) => n.trabajoId === trabajo.id && n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
-    .reduce((s, n) => s + Number(n.monto || 0), 0);
+  // Los demás pagos de nómina de este trabajo que NO están en el reporte personal todavía,
+  // para que se puedan agregar a mano con un botón.
+  const nominaTDisponible =
+    tipo === "personal"
+      ? data.nomina.filter((n) => n.trabajoId === trabajo.id && !nominaT.some((x) => x.id === n.id))
+      : [];
 
   // Materiales del trabajo. Respeta "esGastoEmpresa" igual que la mano de obra.
   const materialesT = data.materiales.filter((m) => {
     if (m.trabajoId !== trabajo.id) return false;
+    if (tipo === "personal" && m.incluidoEnPersonal) return true;
     if (m.esGastoEmpresa) return tipo === "empresa";
     const esPagoDeCuentaPersonal = !!data.cuentas.find((c) => c.id === m.cuentaId)?.esPersonal;
     return tipo === "personal" ? esPagoDeCuentaPersonal : !esPagoDeCuentaPersonal;
   });
+  // Los demás materiales de este trabajo que NO están en el reporte personal todavía.
+  const materialesTDisponible =
+    tipo === "personal"
+      ? data.materiales.filter((m) => m.trabajoId === trabajo.id && !materialesT.some((x) => x.id === m.id))
+      : [];
+
+  // En el reporte personal: si se agregó a mano un gasto que en realidad salió de una cuenta de la
+  // empresa (Max One/MB Services), esa plata hay que devolvérsela a esa cuenta — porque quien recibió
+  // el pago del cliente aquí fue una persona, no la empresa.
+  const devolverACuentaEmpresa = {};
+  if (tipo === "personal") {
+    [...nominaT, ...materialesT].forEach((item) => {
+      if (item.esGastoEmpresa) return; // esto ya se contabiliza en el reporte de empresa aparte
+      const cuentaPago = data.cuentas.find((c) => c.id === item.cuentaId);
+      if (!cuentaPago || cuentaPago.esPersonal) return; // solo interesa lo que salió de cuenta de empresa
+      const esMaterial = item.descripcion !== undefined;
+      const monto = esMaterial ? materialNeto(item) : Number(item.monto || 0);
+      if (!devolverACuentaEmpresa[cuentaPago.id]) devolverACuentaEmpresa[cuentaPago.id] = { nombre: cuentaPago.nombre, monto: 0 };
+      devolverACuentaEmpresa[cuentaPago.id].monto += monto;
+    });
+  }
+  const listaDevolverACuentaEmpresa = Object.values(devolverACuentaEmpresa);
+
   const pagadoConTexto = (n) => {
     const socio = data.socios.find((s) => s.id === n.pagadoPor);
     if (socio) return `dinero propio de ${socio.nombre}`;
@@ -5238,7 +5652,10 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
     return !!cuentaPago?.esCuentaAntesSociedad;
   }).reduce((s, m) => s + Number(m.monto || 0), 0);
 
-  const gananciaNeta = total - manoDeObraPendiente - materialesPagadosPorEmpresa - totalReembolsos;
+  const totalDevolverACuentaEmpresa = listaDevolverACuentaEmpresa.reduce((s, r) => s + r.monto, 0);
+  // En el reporte personal, los materiales de cuenta de empresa ya van dentro de "devolverACuentaEmpresa",
+  // así que no se cuentan aparte aquí (para no restarlos dos veces).
+  const gananciaNeta = total - manoDeObraPendiente - (tipo === "personal" ? 0 : materialesPagadosPorEmpresa) - totalReembolsos - totalDevolverACuentaEmpresa;
   const cuotaBase = gananciaNeta / 2;
   const hayPendiente = totalPendienteCobro > 0;
 
@@ -5333,10 +5750,12 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       {children}
     </td>
   );
-  const estadoGeneral = hayPendiente ? "pendiente" : "pagado";
+  const listaParaReparto = tipo === "personal" ? data.socios : ENTIDADES_REPARTO;
+  const todosRepartosPagados = listaParaReparto.every((s) => !!repartoPagado[s.id]?.pagado);
+  const estadoGeneral = todosRepartosPagados ? "pagado" : "pendiente";
+  const estadoGeneralTexto = todosRepartosPagados ? "CERRADO Y PAGADO EN SU TOTALIDAD" : "CERRADO";
   const colorPrimario = tipo === "personal" ? "#1F3864" : "#1B5E20";
   const colorClaro = tipo === "personal" ? "#DCE6F1" : "#E1F0E3";
-  const estadoGeneralTexto = hayPendiente ? "PENDIENTE — ESPERANDO COBRO DEL CLIENTE" : "PAGADO EN SU TOTALIDAD";
 
   return (
     <HojaImprimible
@@ -5513,6 +5932,40 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
         </div>
       )}
 
+      {tipo === "personal" && (nominaTDisponible.length > 0 || materialesTDisponible.length > 0) && (
+        <div className="no-print mb-6 p-3" style={{ border: "1px dashed #B0A88E" }}>
+          <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#7A7263" }}>
+            Otros gastos de este trabajo (pagados desde otra cuenta) — agrégalos aquí si quieres verlos en este reporte
+          </div>
+          <div className="space-y-1.5">
+            {nominaTDisponible.map((n) => (
+              <div key={n.id} className="flex justify-between items-center text-[12px]">
+                <span>{data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra"} · {money(n.monto)}</span>
+                <button
+                  className="text-[11px] underline"
+                  style={{ color: "#2E7D32" }}
+                  onClick={() => update((d) => { const item = d.nomina.find((x) => x.id === n.id); if (item) item.incluidoEnPersonal = true; })}
+                >
+                  + Agregar
+                </button>
+              </div>
+            ))}
+            {materialesTDisponible.map((m) => (
+              <div key={m.id} className="flex justify-between items-center text-[12px]">
+                <span>{m.descripcion || "Material"} · {money(materialNeto(m))}</span>
+                <button
+                  className="text-[11px] underline"
+                  style={{ color: "#2E7D32" }}
+                  onClick={() => update((d) => { const item = d.materiales.find((x) => x.id === m.id); if (item) item.incluidoEnPersonal = true; })}
+                >
+                  + Agregar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>
           {hayPendiente ? "Ganancia neta proyectada a repartir" : "Ganancia neta a repartir"}
@@ -5523,13 +5976,19 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
               <td className="text-sm py-1.5 pl-2.5">{hayPendiente ? "Total recibido / a cobrar" : "Total recibido"}</td>
               <td className="text-sm py-1.5 text-right">{money(total)}</td>
             </tr>
+            {listaDevolverACuentaEmpresa.map((r) => (
+              <tr key={r.nombre}>
+                <td className="text-sm py-1.5 pl-2.5" style={{ color: "#B26A00" }}>(–) Se le debe devolver a {r.nombre}</td>
+                <td className="text-sm py-1.5 text-right" style={{ color: "#B26A00" }}>-{money(r.monto)}</td>
+              </tr>
+            ))}
             {manoDeObraPendiente > 0 && (
               <tr>
                 <td className="text-sm py-1.5 pl-2.5">(–) Pago pendiente a trabajadores</td>
                 <td className="text-sm py-1.5 text-right">-{money(manoDeObraPendiente)}</td>
               </tr>
             )}
-            {materialesPagadosPorEmpresa > 0 && (
+            {tipo !== "personal" && materialesPagadosPorEmpresa > 0 && (
               <tr>
                 <td className="text-sm py-1.5 pl-2.5">(–) Materiales</td>
                 <td className="text-sm py-1.5 text-right">-{money(materialesPagadosPorEmpresa)}</td>
@@ -5554,32 +6013,32 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
       </div>
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reparto de ganancia (50/50)</div>
+        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>
+          {tipo === "personal" ? "Reparto de ganancia entre Boris y David (50/50)" : "Reparto de ganancia (50/50)"}
+        </div>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <NavyTh>Entidad</NavyTh>
-              <NavyTh right>Reembolso</NavyTh>
+              <NavyTh>{tipo === "personal" ? "Socio" : "Entidad"}</NavyTh>
               <NavyTh right>Ganancia</NavyTh>
-              {nominaMassielPagada > 0 && <NavyTh right>Nómina Massiel</NavyTh>}
+              <NavyTh right>Reembolso</NavyTh>
               <NavyTh right>Monto total a pagar</NavyTh>
               <NavyTh center>Estado</NavyTh>
             </tr>
           </thead>
           <tbody>
-            {ENTIDADES_REPARTO.map((s) => {
+            {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
               const estado = repartoPagado[s.id];
               const pagado = !!estado?.pagado;
-              const esMbServices = s.id === "entidad_mb_services";
-              const reembolsoEntidad = esMbServices ? totalReembolsos : 0;
-              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
+              const davidId = data.socios.find((sx) => sx.nombre === "David")?.id;
+              const reembolsoDavid = davidId ? (reembolsosPorSocio[davidId]?.monto || 0) : 0;
+              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? (totalReembolsos - reembolsoDavid) : reembolsoDavid);
+              const montoEntidad = cuotaBase + reembolsoEntidad;
               return (
                 <tr key={s.id}>
                   <NavyTd>{s.nombre}</NavyTd>
-                  <NavyTd right>{money(reembolsoEntidad)}</NavyTd>
                   <NavyTd right>{money(cuotaBase)}</NavyTd>
-                  {nominaMassielPagada > 0 && <NavyTd right>{money(nominaMassielEntidad)}</NavyTd>}
+                  <NavyTd right>{money(reembolsoEntidad)}</NavyTd>
                   <NavyTd right bold>{money(montoEntidad)}</NavyTd>
                   <NavyTd center>
                     <Pill estado={pagado ? "pagado" : hayPendiente ? "en_espera" : "pendiente"}>
@@ -5593,10 +6052,13 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
-          {ENTIDADES_REPARTO.map((s) => {
+          {(tipo === "personal" ? data.socios : ENTIDADES_REPARTO).map((s) => {
             const estado = repartoPagado[s.id];
             const pagado = !!estado?.pagado;
-            const montoEntidad = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsos + nominaMassielPagada : 0);
+            const davidId = data.socios.find((sx) => sx.nombre === "David")?.id;
+              const reembolsoDavid = davidId ? (reembolsosPorSocio[davidId]?.monto || 0) : 0;
+              const reembolsoEntidad = tipo === "personal" ? (reembolsosPorSocio[s.id]?.monto || 0) : (s.id === "entidad_mb_services" ? (totalReembolsos - reembolsoDavid) : reembolsoDavid);
+            const montoEntidad = cuotaBase + reembolsoEntidad;
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#6B6B6B" }}>Fecha en que se repartió {money(montoEntidad)}:</span>
@@ -5627,7 +6089,7 @@ function PagosTrabajoModal({ trabajo, data, update, onClose, tipo }) {
         </div>
       </div>
 
-      {(reembolsosPorSocio && Object.keys(reembolsosPorSocio).length > 0) && (
+      {tipo !== "personal" && (reembolsosPorSocio && Object.keys(reembolsosPorSocio).length > 0) && (
         <div className="mb-6">
           <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>Reembolsos personales pendientes</div>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -5877,11 +6339,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
   const reporte = data.reportes.find((r) => r.trabajoId === trabajo.id);
   const materialesT = data.materiales.filter((m) => m.trabajoId === trabajo.id);
   const nominaT = data.nomina.filter((n) => n.trabajoId === trabajo.id);
-  // Massiel es co-dueña de MB Services junto con Boris: su nómina ya pagada en este trabajo
-  // se suma al monto a pagar de MB Services, para no tener que hacerle un pago aparte.
-  const nominaMassielPagada = nominaT
-    .filter((n) => n.estado !== "pendiente" && data.empleados.find((e) => e.id === n.empleadoId)?.nombre?.toLowerCase().includes("massiel"))
-    .reduce((s, n) => s + Number(n.monto || 0), 0);
   const clienteInfo = data.clientes.find((cl) => cl.nombre === trabajo.cliente);
 
   // Regla: la cuenta marcada como "antes de la sociedad" (ahí cae el pago del cliente) NUNCA recibe
@@ -5900,10 +6357,11 @@ function ReciboModal({ trabajo, data, update, onClose }) {
       // Esta cuenta nunca se reembolsa: el pago del cliente ya la repone.
       // Se muestra como reposición de caja chica, en vez de desaparecer sin explicación.
       const keyCaja = cuentaPago.id;
-      if (!reposicionesTrabajo[keyCaja]) reposicionesTrabajo[keyCaja] = { nombre: cuentaPago.nombre, materiales: 0, nomina: 0, total: 0 };
+      if (!reposicionesTrabajo[keyCaja]) reposicionesTrabajo[keyCaja] = { nombre: cuentaPago.nombre, materiales: 0, nomina: 0, total: 0, items: [] };
       if (tipo === "Material") reposicionesTrabajo[keyCaja].materiales += monto;
       else reposicionesTrabajo[keyCaja].nomina += monto;
       reposicionesTrabajo[keyCaja].total += monto;
+      reposicionesTrabajo[keyCaja].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), monto });
       return;
     }
     const esEmpresa = p === "empresa";
@@ -5913,7 +6371,7 @@ function ReciboModal({ trabajo, data, update, onClose }) {
     if (tipo === "Material") reembolsosTrabajo[key].materiales += monto;
     else reembolsosTrabajo[key].nomina += monto;
     reembolsosTrabajo[key].total += monto;
-    reembolsosTrabajo[key].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto });
+    reembolsosTrabajo[key].items.push({ tipo, desc: tipo === "Material" ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra"), invoice: item.numeroInvoice || "", monto, formaPago: item.formaPago || "efectivo" });
   };
   materialesT.forEach((m) => acumular(m, "Material"));
   nominaT.forEach((n) => acumular(n, "Nómina"));
@@ -6067,40 +6525,102 @@ function ReciboModal({ trabajo, data, update, onClose }) {
 
       <div className="mb-6">
         <div className="text-[11px] font-bold uppercase mb-2" style={{ color: colorPrimario }}>II. Gastos y costos generales de la obra</div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <Th>Descripción del rubro</Th>
-              <Th center>Tipo de gasto</Th>
-              <Th right>Monto</Th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <Td>Materiales de la obra (subtotal)</Td>
-              <Td center>Egreso directo</Td>
-              <Td right bold>{money(c.materiales)}</Td>
-            </tr>
-            {c.manoDeObraPagada > 0 && (
-              <tr>
-                <Td>Mano de obra ya pagada</Td>
-                <Td center>Egreso directo</Td>
-                <Td right bold>{money(c.manoDeObraPagada)}</Td>
-              </tr>
-            )}
-            {c.manoDeObraPendiente > 0 && (
-              <tr>
-                <Td>Mano de obra pendiente de pagar</Td>
-                <Td center>Egreso acumulado</Td>
-                <Td right bold>{money(c.manoDeObraPendiente)}</Td>
-              </tr>
-            )}
-            <tr style={{ borderTop: `1px solid ${colorPrimario}` }}>
-              <td className="text-sm font-bold py-2 px-2.5" colSpan={2} style={{ background: colorClaro, color: colorPrimario }}>Total de gastos y costos generales</td>
-              <td className="text-sm font-bold py-2 px-2.5 text-right" style={{ background: colorClaro, color: colorPrimario }}>{money(c.materiales + c.manoDeObra)}</td>
-            </tr>
-          </tbody>
-        </table>
+        {(() => {
+          const agrupar = (items) => {
+            const grupos = {};
+            items.forEach((item) => {
+              const nombre = pagadorNombre(data, item.pagadoPor, item.cuentaId);
+              const cuentaPago = data.cuentas.find((c2) => c2.id === item.cuentaId);
+              const esReposicion = !!cuentaPago?.esCuentaAntesSociedad;
+              if (!grupos[nombre]) grupos[nombre] = { nombre, esReposicion, items: [], total: 0 };
+              grupos[nombre].items.push(item);
+            });
+            return Object.values(grupos).sort((a, b) => (b.esReposicion ? 1 : 0) - (a.esReposicion ? 1 : 0));
+          };
+          const colorPagador = (g) => {
+            if (g.esReposicion) return { texto: GREEN, borde: "#cfe0d6" };
+            if (g.nombre === "David") return { texto: "#7B3F9E", borde: "#DCC8E8" };
+            return { texto: "#B26A00", borde: "#F0D6B0" };
+          };
+          const gruposMateriales = agrupar(materialesT);
+          gruposMateriales.forEach((g) => { g.total = g.items.reduce((s, m) => s + materialNeto(m), 0); });
+          const nominaPagada = nominaT.filter((n) => n.estado !== "pendiente");
+          const gruposNomina = agrupar(nominaPagada);
+          gruposNomina.forEach((g) => { g.total = g.items.reduce((s, n) => s + Number(n.monto || 0), 0); });
+          const totalMateriales = gruposMateriales.reduce((s, g) => s + g.total, 0);
+          const totalManoDeObraPagada = gruposNomina.reduce((s, g) => s + g.total, 0);
+
+          const tarjetaPagador = (g, esMaterialGrupo) => {
+            const col = colorPagador(g);
+            return (
+              <div key={g.nombre} className="mb-2 p-2.5" style={{ background: "#fff", border: `1px solid ${col.borde}`, borderRadius: 5 }}>
+                <p className="text-[11px] font-bold uppercase mb-1.5" style={{ color: col.texto }}>
+                  {g.nombre}
+                  {g.esReposicion && (
+                    <span className="ml-1.5 text-[9px] uppercase px-1.5 py-0.5 normal-case" style={{ background: "#E1F0E3", color: GREEN }}>reposición</span>
+                  )}
+                </p>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid #ddd" }}>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>{esMaterialGrupo ? "Material" : "Empleado"}</td>
+                      <td className="text-[9px] py-1" style={{ color: "#888" }}>Fecha</td>
+                      <td className="text-[9px] py-1 text-right" style={{ color: "#888" }}>Monto</td>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {g.items.map((item) => (
+                      <tr key={item.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
+                        <td className="text-[10.5px] py-1">{esMaterialGrupo ? (item.descripcion || "Material") : (data.empleados.find((e) => e.id === item.empleadoId)?.nombre || "Mano de obra")}</td>
+                        <td className="text-[10.5px] py-1">{fmtDate(item.fecha)}</td>
+                        <td className="text-[10.5px] py-1 text-right">{money(esMaterialGrupo ? materialNeto(item) : Number(item.monto || 0))}</td>
+                      </tr>
+                    ))}
+                    <tr>
+                      <td colSpan={2} className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>Total {g.nombre}</td>
+                      <td className="text-[10.5px] font-bold py-1 text-right" style={{ color: col.texto }}>{money(g.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            );
+          };
+
+          return (
+            <>
+              {gruposMateriales.length > 0 && (
+                <div className="mb-3 p-3" style={{ background: "#EDF3FA", border: "1px solid #B7CDE8", borderRadius: 6 }}>
+                  <p className="text-[10px] font-bold uppercase mb-2" style={{ color: "#2C5A8A" }}>Materiales</p>
+                  {gruposMateriales.map((g) => tarjetaPagador(g, true))}
+                  <div className="flex justify-between text-[12px] font-bold pt-1.5 mt-1" style={{ color: "#2C5A8A", borderTop: "1px solid #B7CDE8" }}>
+                    <span>Total materiales</span>
+                    <span>{money(totalMateriales)}</span>
+                  </div>
+                </div>
+              )}
+              {gruposNomina.length > 0 && (
+                <div className="mb-3 p-3" style={{ background: "#FBF0E4", border: "1px solid #EAC896", borderRadius: 6 }}>
+                  <p className="text-[10px] font-bold uppercase mb-2" style={{ color: "#A15C00" }}>Mano de obra</p>
+                  {gruposNomina.map((g) => tarjetaPagador(g, false))}
+                  <div className="flex justify-between text-[12px] font-bold pt-1.5 mt-1" style={{ color: "#A15C00", borderTop: "1px solid #EAC896" }}>
+                    <span>Total mano de obra</span>
+                    <span>{money(totalManoDeObraPagada)}</span>
+                  </div>
+                </div>
+              )}
+              {c.manoDeObraPendiente > 0 && (
+                <div className="flex justify-between text-sm py-1.5 px-1">
+                  <span>Mano de obra pendiente de pagar</span>
+                  <span className="font-bold">{money(c.manoDeObraPendiente)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm font-bold py-2 px-2.5" style={{ background: colorClaro, color: colorPrimario, borderTop: `1px solid ${colorPrimario}` }}>
+                <span>Total de gastos y costos generales</span>
+                <span>{money(c.materiales + c.manoDeObra)}</span>
+              </div>
+            </>
+          );
+        })()}
       </div>
 
       {listaReposiciones.length > 0 && (
@@ -6128,32 +6648,6 @@ function ReciboModal({ trabajo, data, update, onClose }) {
       )}
 
       <div className="mb-6">
-        <div className="text-[11px] font-bold uppercase mb-2" style={{ color: "#B26A00" }}>Reembolso (compró material o pagó nómina de su cuenta personal)</div>
-        {listaReembolsos.length === 0 ? (
-          <div className="text-sm" style={{ color: "#888" }}>— nadie pagó de su cuenta personal en este trabajo —</div>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Persona / cuenta</Th>
-                <Th>Concepto</Th>
-                <Th right>Monto</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {listaReembolsos.map((r) => (
-                <tr key={r.nombre}>
-                  <Td>{r.nombre}</Td>
-                  <Td>{r.materiales > 0 && r.nomina > 0 ? "Materiales + mano de obra" : r.materiales > 0 ? "Materiales" : "Mano de obra"}</Td>
-                  <Td right bold><span style={{ color: "#B26A00" }}>{money(r.total)}</span></Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="mb-6">
         <div className="flex justify-between items-center p-3" style={{ background: colorClaro, border: `1px solid ${colorPrimario}` }}>
           <span className="text-[13px] font-bold uppercase" style={{ color: colorPrimario }}>Balance: Ganancia neta</span>
           <span className="text-[16px] font-bold" style={{ color: colorPrimario }}>{money(restoARepartir)}</span>
@@ -6166,42 +6660,44 @@ function ReciboModal({ trabajo, data, update, onClose }) {
           <thead>
             <tr>
               <Th>Entidad</Th>
-              <Th right>Reembolso</Th>
               <Th right>Ganancia</Th>
-              {nominaMassielPagada > 0 && <Th right>Nómina Massiel</Th>}
+              <Th right>Reembolso</Th>
               <Th right>Monto total a pagar</Th>
               <Th center>Estado</Th>
             </tr>
           </thead>
           <tbody>
-            {ENTIDADES_REPARTO.map((s) => {
-              const estado = repartoCierre[s.id];
-              const pagado = !!estado?.pagado;
-              const esMbServices = s.id === "entidad_mb_services";
-              const reembolsoEntidad = esMbServices ? totalReembolsosTrabajo : 0;
-              const nominaMassielEntidad = esMbServices ? nominaMassielPagada : 0;
-              const montoEntidad = cuotaBase + reembolsoEntidad + nominaMassielEntidad;
-              return (
-                <tr key={s.id}>
-                  <Td>{s.nombre}</Td>
-                  <Td right>{money(reembolsoEntidad)}</Td>
-                  <Td right>{money(cuotaBase)}</Td>
-                  {nominaMassielPagada > 0 && <Td right>{money(nominaMassielEntidad)}</Td>}
-                  <Td right bold>{money(montoEntidad)}</Td>
-                  <Td center>
-                    <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
-                    {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
-                  </Td>
-                </tr>
-              );
-            })}
+            {(() => {
+              const reembolsoParaMaxOne = listaReembolsos.filter((r) => r.nombre === "David").reduce((s, r) => s + r.total, 0);
+              const reembolsoParaMBServices = totalReembolsosTrabajo - reembolsoParaMaxOne;
+              return ENTIDADES_REPARTO.map((s) => {
+                const estado = repartoCierre[s.id];
+                const pagado = !!estado?.pagado;
+                const esMbServices = s.id === "entidad_mb_services";
+                const reembolsoEntidad = esMbServices ? reembolsoParaMBServices : reembolsoParaMaxOne;
+                const montoEntidad = cuotaBase + reembolsoEntidad;
+                return (
+                  <tr key={s.id}>
+                    <Td>{s.nombre}</Td>
+                    <Td right>{money(cuotaBase)}</Td>
+                    <Td right>{money(reembolsoEntidad)}</Td>
+                    <Td right bold>{money(montoEntidad)}</Td>
+                    <Td center>
+                      <Pill estado={pagado ? "pagado" : "pendiente"}>{pagado ? "Pagado" : "Pendiente"}</Pill>
+                      {pagado && estado?.fecha && <div className="text-[10px] mt-1" style={{ color: "#888" }}>{fmtDate(estado.fecha)}</div>}
+                    </Td>
+                  </tr>
+                );
+              });
+            })()}
           </tbody>
         </table>
         <div className="no-print flex flex-wrap gap-4 mt-2">
           {ENTIDADES_REPARTO.map((s) => {
             const estado = repartoCierre[s.id];
             const pagado = !!estado?.pagado;
-            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? totalReembolsosTrabajo + nominaMassielPagada : 0);
+            const reembolsoParaMaxOne = listaReembolsos.filter((r) => r.nombre === "David").reduce((s, r) => s + r.total, 0);
+            const totalConReembolso = cuotaBase + (s.id === "entidad_mb_services" ? (totalReembolsosTrabajo - reembolsoParaMaxOne) : reembolsoParaMaxOne);
             return fechaEditando === s.id ? (
               <div key={s.id} className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px]" style={{ color: "#7A7263" }}>Fecha en que se repartió {money(totalConReembolso)}:</span>
@@ -6241,10 +6737,12 @@ function ReciboModal({ trabajo, data, update, onClose }) {
 
       <div
         className="flex items-center gap-2.5 px-4 py-3 mb-6 text-sm"
-        style={{ background: "#E8F5E9", border: "1px solid #2E7D32", borderRadius: 4 }}
+        style={{ background: ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#E8F5E9" : "#FBEAEA", border: `1px solid ${ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#2E7D32" : "#C62828"}`, borderRadius: 4 }}
       >
         <span>ESTADO GENERAL DEL TRABAJO:</span>
-        <b style={{ color: "#2E7D32" }}>CERRADO</b>
+        <b style={{ color: ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "#2E7D32" : "#C62828" }}>
+          {ENTIDADES_REPARTO.every((s) => !!repartoCierre[s.id]?.pagado) ? "CERRADO Y PAGADO EN SU TOTALIDAD" : "CERRADO"}
+        </b>
       </div>
 
       <div style={{ borderTop: "1px solid #D9D9D9", paddingTop: 10 }}>
