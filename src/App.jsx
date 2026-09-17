@@ -4411,6 +4411,18 @@ function ReporteSimple({ data, update }) {
   const opcionesPagador = [...socios.map((s) => s.nombre), ...cuentasEmpresa.map((c) => c.nombre)];
   const trabajo = trabajos.find((t) => t.id === trabajoId);
   const gastos = (data.gastosSimples || []).filter((g) => g.trabajoId === trabajoId).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+  const concluido = (data.reporteSimpleConcluidos || []).includes(trabajoId);
+
+  const toggleConcluido = () => {
+    update((d) => {
+      if (!d.reporteSimpleConcluidos) d.reporteSimpleConcluidos = [];
+      if (d.reporteSimpleConcluidos.includes(trabajoId)) {
+        d.reporteSimpleConcluidos = d.reporteSimpleConcluidos.filter((id) => id !== trabajoId);
+      } else {
+        d.reporteSimpleConcluidos.push(trabajoId);
+      }
+    });
+  };
 
   const totalGastos = gastos.reduce((s, g) => s + Number(g.monto || 0), 0);
   const acordado = Number(trabajo?.estimado || 0);
@@ -4464,14 +4476,15 @@ function ReporteSimple({ data, update }) {
               )}
               {trabajos.filter((t) => !t.pagoPersonal).map((t) => {
                 const seleccionado = trabajoId === t.id;
+                const conc = (data.reporteSimpleConcluidos || []).includes(t.id);
                 return (
                   <tr
                     key={t.id}
                     onClick={() => setTrabajoId(t.id)}
                     style={{ background: seleccionado ? "#1B5E20" : "#EAF5EC", color: seleccionado ? "#fff" : "#1B5E20", borderBottom: "1px solid #fff", cursor: "pointer" }}
                   >
-                    <td className="py-2 px-3 text-[12px] font-semibold">{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
-                    <td className="py-2 px-3 text-[11px] text-right">{t.cliente || "—"}</td>
+                    <td className="py-2 px-3 text-[12px] font-semibold" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.cliente || "—"}</td>
                   </tr>
                 );
               })}
@@ -4492,14 +4505,15 @@ function ReporteSimple({ data, update }) {
               )}
               {trabajos.filter((t) => t.pagoPersonal).map((t) => {
                 const seleccionado = trabajoId === t.id;
+                const conc = (data.reporteSimpleConcluidos || []).includes(t.id);
                 return (
                   <tr
                     key={t.id}
                     onClick={() => setTrabajoId(t.id)}
                     style={{ background: seleccionado ? "#1F3864" : "#E7EEF9", color: seleccionado ? "#fff" : "#1F3864", borderBottom: "1px solid #fff", cursor: "pointer" }}
                   >
-                    <td className="py-2 px-3 text-[12px] font-semibold">{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
-                    <td className="py-2 px-3 text-[11px] text-right">{t.cliente || "—"}</td>
+                    <td className="py-2 px-3 text-[12px] font-semibold" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.numeroTrabajo ? `#${t.numeroTrabajo} · ` : ""}{t.apodo || t.nombre}</td>
+                    <td className="py-2 px-3 text-[11px] text-right" style={conc ? { textDecoration: "line-through", opacity: 0.6 } : {}}>{t.cliente || "—"}</td>
                   </tr>
                 );
               })}
@@ -4509,10 +4523,28 @@ function ReporteSimple({ data, update }) {
       </div>
 
       {trabajo && (
-        <div style={{ background: "#f5f4f0", borderRadius: 10, overflow: "hidden", border: "1px solid #e5e3dc" }}>
-          <div className="p-4" style={{ background: "#000", color: "#fff" }}>
+        <>
+          <div className="no-print flex justify-end gap-2 mb-3">
+            <button
+              onClick={toggleConcluido}
+              className="btn-primary"
+              style={concluido ? { background: "#6B6B6B" } : {}}
+            >
+              {concluido ? "Reabrir" : "Guardar / Marcar concluido"}
+            </button>
+            <button onClick={() => window.print()} className="btn-primary"><Printer size={15} /> Imprimir / PDF</button>
+          </div>
+          <div id="recibo-print" style={{ background: "#f5f4f0", borderRadius: 10, overflow: "hidden", border: "1px solid #e5e3dc" }}>
+          <div className="p-4" style={{ background: "#000", color: "#fff", position: "relative" }}>
             <p className="text-[9px] uppercase tracking-wide mb-1" style={{ color: "#999" }}>Desglose de gastos</p>
-            <p className="text-[16px] font-bold">{trabajo.apodo || trabajo.nombre} {money(acordado)}{ganancia !== acordado ? " ya repartido" : ""}</p>
+            <p className="text-[16px] font-bold" style={concluido ? { textDecoration: "line-through", textDecorationColor: "#c0392b", textDecorationThickness: 2 } : {}}>
+              {trabajo.apodo || trabajo.nombre} {money(acordado)}{ganancia !== acordado ? " ya repartido" : ""}
+            </p>
+            {concluido && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 uppercase" style={{ background: "#c0392b", color: "#fff", borderRadius: 3, marginTop: 4, display: "inline-block" }}>
+                ✓ Concluido
+              </span>
+            )}
           </div>
 
           <div className="p-4" style={{ background: "#fff" }}>
@@ -4611,8 +4643,9 @@ function ReporteSimple({ data, update }) {
               </table>
             </div>
           </div>
+          </div>
 
-          <div className="p-4" style={{ background: "#fff", borderTop: "1px solid #e5e3dc" }}>
+          <div className="p-4 no-print" style={{ background: "#fff", borderTop: "1px solid #e5e3dc" }}>
             <p className="text-[11px] font-bold uppercase mb-3">+ Agregar línea de gasto</p>
             <input
               className="ledger-input w-full mb-2"
@@ -4665,7 +4698,7 @@ function ReporteSimple({ data, update }) {
               + Agregar Gasto
             </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
