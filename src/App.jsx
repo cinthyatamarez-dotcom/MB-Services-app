@@ -1126,6 +1126,21 @@ function Trabajos({ data, update, onViewPhoto }) {
                     />
                   </div>
 
+                  <div className="flex items-end gap-1 border-b mb-2" style={{ borderColor: LINE }}>
+                    <div
+                      className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide"
+                      style={{
+                        background: PAPER,
+                        borderTop: `2px solid ${AMBER}`,
+                        borderLeft: `1px solid ${LINE}`,
+                        borderRight: `1px solid ${LINE}`,
+                        color: INK,
+                      }}
+                    >
+                      Reporte simple
+                    </div>
+                  </div>
+
                   {(() => {
                     const materialesT = data.materiales
                       .filter((m) => m.trabajoId === t.id)
