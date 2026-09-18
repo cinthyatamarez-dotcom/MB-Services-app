@@ -1168,8 +1168,7 @@ function Trabajos({ data, update, onViewPhoto }) {
                     const totalGastos = c.materiales + c.manoDeObra;
                     const totalCliente = c.tienePagoReal ? Number(t.estimadoPagado || 0) : Number(t.estimado || 0);
                     const gananciaReporte = totalCliente - totalGastos;
-                    const gananciaParaRepartir = gananciaReporte;
-                    const mitadGanancia = gananciaParaRepartir / 2;
+                    const mitadGanancia = gananciaReporte / 2;
                     const reembolso = c.totalReembolsosTrabajo;
 
                     return (
@@ -4487,8 +4486,7 @@ function ReporteSimple({ data, update }) {
         const totalGastos = c.materiales + c.manoDeObra;
         const totalCliente = c.tienePagoReal ? Number(t.estimadoPagado || 0) : Number(t.estimado || 0);
         const gananciaReporte = totalCliente - totalGastos;
-        const gananciaParaRepartir = gananciaReporte;
-        const mitadGanancia = gananciaParaRepartir / 2;
+        const mitadGanancia = gananciaReporte / 2;
         const reembolso = c.totalReembolsosTrabajo;
 
         return (
