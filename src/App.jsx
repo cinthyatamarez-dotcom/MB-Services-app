@@ -466,7 +466,7 @@ function FontImport() {
       @media print {
         @page { size: auto; margin: 0.3in; }
         body * { visibility: hidden; }
-        #recibo-print, #recibo-print * { visibility: visible; }
+        #recibo-print, #recibo-print * { visibility: visible; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
         .fixed { position: static !important; overflow: visible !important; height: auto !important; max-height: none !important; }
         #recibo-print { position: absolute; top: 0; left: 0; width: 100%; overflow: visible !important; height: auto !important; max-height: none !important; font-size: 10.5px !important; line-height: 1.2 !important; padding: 6px !important; }
         #recibo-print .mb-6 { margin-bottom: 6px !important; }
@@ -4410,7 +4410,36 @@ function ReporteSimple({ data, update }) {
   const cuentasEmpresa = (data.cuentas || []).filter((c) => !c.esPersonal && /max one|mb services/i.test(c.nombre || ""));
   const opcionesPagador = [...socios.map((s) => s.nombre), ...cuentasEmpresa.map((c) => c.nombre)];
   const trabajo = trabajos.find((t) => t.id === trabajoId);
-  const gastos = (data.gastosSimples || []).filter((g) => g.trabajoId === trabajoId).sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
+
+  // Jala automáticamente lo que ya está registrado en Materiales y Nómina para este trabajo,
+  // y lo junta con los gastos que se agreguen a mano aquí mismo.
+  const materialesDelTrabajo = data.materiales
+    .filter((m) => m.trabajoId === trabajoId)
+    .map((m) => ({
+      id: m.id,
+      origen: "material",
+      fecha: m.fecha,
+      descripcion: m.descripcion || "Material",
+      categoria: "Materiales",
+      pagadoPor: pagadorNombre(data, m.pagadoPor, m.cuentaId),
+      monto: materialNeto(m),
+    }));
+  const nominaDelTrabajo = data.nomina
+    .filter((n) => n.trabajoId === trabajoId && n.estado !== "pendiente")
+    .map((n) => ({
+      id: n.id,
+      origen: "nomina",
+      fecha: n.fecha,
+      descripcion: data.empleados.find((e) => e.id === n.empleadoId)?.nombre || "Mano de obra",
+      categoria: "Mano de obra",
+      pagadoPor: pagadorNombre(data, n.pagadoPor, n.cuentaId),
+      monto: Number(n.monto || 0),
+    }));
+  const gastosManuales = (data.gastosSimples || [])
+    .filter((g) => g.trabajoId === trabajoId)
+    .map((g) => ({ ...g, origen: "manual" }));
+
+  const gastos = [...materialesDelTrabajo, ...nominaDelTrabajo, ...gastosManuales].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   const concluido = (data.reporteSimpleConcluidos || []).includes(trabajoId);
 
   const toggleConcluido = () => {
@@ -4586,14 +4615,18 @@ function ReporteSimple({ data, update }) {
                     <tr><td colSpan={6} className="py-3 text-center text-xs" style={{ color: "#999" }}>Sin gastos registrados</td></tr>
                   )}
                   {gastos.map((g) => (
-                    <tr key={g.id} style={{ borderBottom: "1px solid #eee" }}>
+                    <tr key={g.origen + g.id} style={{ borderBottom: "1px solid #eee" }}>
                       <td className="py-2 text-[12px]">{fmtDate(g.fecha)}</td>
                       <td className="py-2 text-[12px]">{g.descripcion}</td>
                       <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.categoria}</td>
                       <td className="py-2 text-[12px]" style={{ color: "#666" }}>{g.pagadoPor}</td>
                       <td className="py-2 text-[12px] text-right font-semibold" style={{ color: "#c0392b" }}>-{money(g.monto)}</td>
                       <td className="py-2 text-right pl-2">
-                        <button onClick={() => eliminarGasto(g.id)} style={{ color: "#bbb", fontSize: 14 }}>✕</button>
+                        {g.origen === "manual" ? (
+                          <button onClick={() => eliminarGasto(g.id)} style={{ color: "#bbb", fontSize: 14 }}>✕</button>
+                        ) : (
+                          <span className="text-[8px] uppercase" style={{ color: "#aaa" }}>{g.origen === "material" ? "Mat." : "Nóm."}</span>
+                        )}
                       </td>
                     </tr>
                   ))}
