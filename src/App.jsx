@@ -4435,6 +4435,9 @@ function ReporteSimple({ data, update }) {
       pagadoPor: pagadorNombre(data, n.pagadoPor, n.cuentaId),
       monto: Number(n.monto || 0),
     }));
+  const nominaPendienteTrabajo = data.nomina
+    .filter((n) => n.trabajoId === trabajoId && n.estado === "pendiente")
+    .reduce((s, n) => s + Number(n.monto || 0), 0);
   const gastosManuales = (data.gastosSimples || [])
     .filter((g) => g.trabajoId === trabajoId)
     .map((g) => ({ ...g, origen: "manual" }));
@@ -4453,8 +4456,9 @@ function ReporteSimple({ data, update }) {
     });
   };
 
-  const totalGastos = gastos.reduce((s, g) => s + Number(g.monto || 0), 0);
-  const acordado = Number(trabajo?.estimado || 0);
+  const totalGastos = gastos.reduce((s, g) => s + Number(g.monto || 0), 0) + nominaPendienteTrabajo;
+  const tienePagoReal = trabajo?.estimadoPagado !== undefined && trabajo?.estimadoPagado !== null && trabajo?.estimadoPagado !== "";
+  const acordado = tienePagoReal ? Number(trabajo.estimadoPagado || 0) : Number(trabajo?.estimado || 0);
   const ganancia = acordado - totalGastos;
 
   // Reembolso: lo que Boris o David pagaron de su bolsillo en este trabajo, y hay que devolverles.
@@ -4639,9 +4643,15 @@ function ReporteSimple({ data, update }) {
               <span className="font-semibold">{money(acordado)}</span>
             </div>
             <div className="flex justify-between text-[13px] pb-2" style={{ color: "#c0392b" }}>
-              <span>Total Gastos</span>
+              <span>Total Gastos{nominaPendienteTrabajo > 0 ? " (incluye pendiente)" : ""}</span>
               <span className="font-semibold">-{money(totalGastos)}</span>
             </div>
+            {nominaPendienteTrabajo > 0 && (
+              <div className="flex justify-between text-[10px] pb-2" style={{ color: "#999" }}>
+                <span>· de eso, nómina pendiente de pagar</span>
+                <span>{money(nominaPendienteTrabajo)}</span>
+              </div>
+            )}
             <div className="flex justify-between pt-2" style={{ borderTop: "2px solid #000" }}>
               <span className="text-[15px] font-extrabold">GANANCIA</span>
               <span className="text-[16px] font-extrabold" style={{ color: "#1B7A3D" }}>{money(ganancia)}</span>
