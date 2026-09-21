@@ -4408,7 +4408,10 @@ function ReporteSimple({ data, update }) {
   const trabajos = data.trabajos || [];
   const socios = data.socios || [];
   const cuentasEmpresa = (data.cuentas || []).filter((c) => !c.esPersonal && /max one|mb services/i.test(c.nombre || ""));
-  const opcionesPagador = [...socios.map((s) => s.nombre), ...cuentasEmpresa.map((c) => c.nombre)];
+  const nombresCuentasEmpresa = cuentasEmpresa.map((c) => c.nombre);
+  if (!nombresCuentasEmpresa.some((n) => /mb services/i.test(n))) nombresCuentasEmpresa.push("MB Services");
+  if (!nombresCuentasEmpresa.some((n) => /max one/i.test(n))) nombresCuentasEmpresa.push("Max One");
+  const opcionesPagador = [...socios.map((s) => s.nombre), ...nombresCuentasEmpresa];
   const trabajo = trabajos.find((t) => t.id === trabajoId);
 
   // Jala automáticamente lo que ya está registrado en Materiales y Nómina para este trabajo,
