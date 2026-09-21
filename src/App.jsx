@@ -4464,10 +4464,13 @@ function ReporteSimple({ data, update }) {
   const acordado = tienePagoReal ? Number(trabajo.estimadoPagado || 0) : Number(trabajo?.estimado || 0);
   const ganancia = acordado - totalGastos;
 
-  // Reembolso: lo que Boris o David pagaron de su bolsillo en este trabajo, y hay que devolverles.
+  // Reembolso: lo que Boris o David pagaron de su bolsillo (o desde MB Services, que es de Boris)
+  // en este trabajo, y hay que devolverles. Solo Max One queda exento, porque ahí cae el pago del
+  // cliente y esa plata se repone sola.
   const reembolsoPorSocio = {};
   socios.forEach((s) => { reembolsoPorSocio[s.nombre] = gastos.filter((g) => g.pagadoPor === s.nombre).reduce((s2, g) => s2 + Number(g.monto || 0), 0); });
-  const reembolsoBoris = reembolsoPorSocio["Boris"] || 0;
+  const reembolsoMbServices = gastos.filter((g) => /mb services/i.test(g.pagadoPor || "")).reduce((s2, g) => s2 + Number(g.monto || 0), 0);
+  const reembolsoBoris = (reembolsoPorSocio["Boris"] || 0) + reembolsoMbServices;
   const reembolsoDavid = reembolsoPorSocio["David"] || 0;
   // Cada uno recibe la mitad limpia de la ganancia. El reembolso NO se resta antes de repartir —
   // es dinero propio que alguien adelantó, no una ganancia menos: se le devuelve completo, aparte.
